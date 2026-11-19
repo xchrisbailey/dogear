@@ -40,6 +40,8 @@ final class FakeGrimmory: Sendable {
         var version: String
         var accounts: [Account]
         var issued: [Tokens] = []
+        /// Access tokens past their lifetime, and refresh tokens rotated away or revoked.
+        var invalid: Set<String> = []
         var requests: [Request] = []
         var library: [ShelvedBook] = []
     }
@@ -57,6 +59,20 @@ final class FakeGrimmory: Sendable {
 
     var requests: [Request] { state.withLock { $0.requests } }
     var issuedTokens: [Tokens] { state.withLock { $0.issued } }
+
+    /// Every access token issued so far stops working, as after its 2 h lifetime.
+    func expireAccessTokens() {
+        state.withLock { state in state.invalid.formUnion(state.issued.map(\.access)) }
+    }
+
+    /// Every refresh token issued so far is refused, as when expired or revoked.
+    func revokeRefreshTokens() {
+        state.withLock { state in state.invalid.formUnion(state.issued.map(\.refresh)) }
+    }
+
+    func setKind(_ kind: Kind) {
+        state.withLock { $0.kind = kind }
+    }
 
     private func handle(_ request: URLRequest, body: Data?) -> FakeServer.Reply {
         state.withLock { state in
@@ -80,6 +96,8 @@ final class FakeGrimmory: Sendable {
                 return Self.fixture("healthcheck", replacing: ["v3.5.0": state.version])
             case ("POST", "/api/v1/auth/login"):
                 return Self.login(recorded.json, state: &state)
+            case ("POST", "/api/v1/auth/refresh"):
+                return Self.refresh(recorded.json, state: &state)
             case ("GET", "/api/v1/version"):
                 guard Self.isAuthorized(recorded, state: state) else {
                     return Self.fixture("error-401-unauthenticated", status: 401)
@@ -103,19 +121,34 @@ final class FakeGrimmory: Sendable {
         guard let account = state.accounts.first(where: { $0.username == username && $0.password == password }) else {
             return fixture("login-wrong-password", status: 401)
         }
-        let n = state.issued.count + 1
-        let tokens = Tokens(access: "access-\(n)", refresh: "refresh-\(n)")
-        state.issued.append(tokens)
+        let tokens = issueTokens(state: &state)
         return fixture(
             account.isDefaultPassword ? "login-default-password" : "login-success",
             replacing: ["<ACCESS_TOKEN>": tokens.access, "<REFRESH_TOKEN>": tokens.refresh]
         )
     }
 
+    private static func refresh(_ json: [String: any Sendable]?, state: inout State) -> FakeServer.Reply {
+        guard let token = json?["refreshToken"] as? String,
+              state.issued.contains(where: { $0.refresh == token }), !state.invalid.contains(token)
+        else { return fixture("refresh-rejected", status: 401) }
+        // Rotation: the presented refresh token is revoked once a new one is issued.
+        state.invalid.insert(token)
+        let tokens = issueTokens(state: &state)
+        return fixture("refresh-success", replacing: ["<ACCESS_TOKEN_2>": tokens.access, "<REFRESH_TOKEN_2>": tokens.refresh])
+    }
+
+    private static func issueTokens(state: inout State) -> Tokens {
+        let n = state.issued.count + 1
+        let tokens = Tokens(access: "access-\(n)", refresh: "refresh-\(n)")
+        state.issued.append(tokens)
+        return tokens
+    }
+
     static func isAuthorized(_ request: Request, state: State) -> Bool {
         guard let header = request.headers["Authorization"], header.hasPrefix("Bearer ") else { return false }
         let token = String(header.dropFirst("Bearer ".count))
-        return state.issued.contains { $0.access == token }
+        return state.issued.contains { $0.access == token } && !state.invalid.contains(token)
     }
 
     static let spaPage = FakeServer.Reply.response(

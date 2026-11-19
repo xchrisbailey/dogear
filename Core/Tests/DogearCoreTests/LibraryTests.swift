@@ -19,7 +19,6 @@ struct LibraryTests {
     func library(on server: FakeGrimmory) throws -> Library {
         Library(
             account: Account(urlSession: server.session, tokenStore: tokenStore),
-            urlSession: server.session,
             store: try LibraryStore(url: storeURL)
         )
     }
@@ -70,7 +69,7 @@ struct LibraryTests {
 
         let offline = try library(on: FakeGrimmory(kind: .unreachable))
 
-        await #expect(throws: LibraryError.unreachable) { try await offline.refresh() }
+        await #expect(throws: RequestError.unreachable) { try await offline.refresh() }
         #expect(await offline.cachedBooks() == online)
     }
 
@@ -85,6 +84,18 @@ struct LibraryTests {
 
         #expect(books.map(\.id) == [14, 5])
         #expect(await library.cachedBooks().map(\.id) == [14, 5])
+    }
+
+    @Test func expiredAccessTokenDuringRefreshIsRenewedOnce() async throws {
+        let server = FakeGrimmory()
+        server.shelve([FakeGrimmory.mobyDick, FakeGrimmory.atomicHabits, FakeGrimmory.projectHailMary])
+        let library = try await signedInLibrary(on: server)
+        server.expireAccessTokens()
+
+        let books = try await library.refresh()
+
+        #expect(books.map(\.id) == [21, 4, 5])
+        #expect(server.requests.filter { $0.path == "/api/v1/auth/refresh" }.count == 1)
     }
 
     @Test func audiobookUsesItsOwnCover() async throws {

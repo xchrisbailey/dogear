@@ -21,6 +21,7 @@ struct HomeView: View {
                 )
             }
             .navigationTitle("Library")
+            .toolbar { SignOutButton() }
         }
     }
 }

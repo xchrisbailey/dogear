@@ -3,12 +3,10 @@ import Foundation
 /// The signed-in reader's Books: fetched from the Server, kept in a `LibraryStore` for offline use.
 public actor Library {
     private let account: Account
-    private let urlSession: URLSession
     private let cache: LibraryCache
 
-    public init(account: Account, urlSession: URLSession = .shared, store: LibraryStore) {
+    public init(account: Account, store: LibraryStore) {
         self.account = account
-        self.urlSession = urlSession
         cache = LibraryCache(modelContainer: store.container)
     }
 
@@ -18,43 +16,31 @@ public actor Library {
     }
 
     /// Fetches the latest Books and replaces the cached list. On failure the cache is left as it was.
-    public func refresh() async throws(LibraryError) -> [Book] {
-        let client = try await client()
-        let books = try await client.books()
-        do {
-            try await cache.replaceBooks(with: books)
-        } catch {
-            throw .couldNotSave
-        }
+    public func refresh() async throws(RequestError) -> [Book] {
+        let books = try await client().books()
+        // A failed save only costs the offline copy; the fresh list is still worth showing.
+        try? await cache.replaceBooks(with: books)
         return books
     }
 
     /// The cover image, from the cache when it's there, otherwise fetched and cached. nil when unavailable.
     public func image(for cover: Cover) async -> Data? {
         if let cached = await cache.image(for: cover) { return cached }
-        guard let client = try? await client(), let image = await client.image(for: cover) else { return nil }
+        guard let image = await client().image(for: cover) else { return nil }
         try? await cache.store(image, for: cover)
         return image
     }
 
-    private func client() async throws(LibraryError) -> LibraryClient {
-        guard let session = await account.session else { throw .signedOut }
-        return LibraryClient(server: session.server, accessToken: session.accessToken, urlSession: urlSession)
+    private func client() async -> LibraryClient {
+        LibraryClient(account: account, server: await account.session?.server)
     }
-}
-
-public enum LibraryError: Error, Equatable {
-    case signedOut
-    case unreachable
-    case serverChanged
-    case couldNotSave
 }
 
 /// The app-API calls behind the Library.
 private struct LibraryClient {
-    let server: URL
-    let accessToken: String
-    let urlSession: URLSession
+    let account: Account
+    /// nil when signed out; requests then fail with `.signedOut`.
+    let server: URL?
 
     private struct Page: Decodable {
         struct Summary: Decodable { var id: Int }
@@ -89,7 +75,7 @@ private struct LibraryClient {
     private static let pageSize = 50
     private static let concurrentDetails = 6
 
-    func books() async throws(LibraryError) -> [Book] {
+    func books() async throws(RequestError) -> [Book] {
         var ids: [Int] = []
         var page = 0
         while true {
@@ -102,14 +88,14 @@ private struct LibraryClient {
     }
 
     /// The list only names each Book's primary file, so each Book's detail is fetched for its Book files.
-    private func details(of ids: [Int]) async throws(LibraryError) -> [Book] {
-        let results = await withTaskGroup(of: (Int, Result<Book, LibraryError>).self) { group in
-            var results: [Int: Result<Book, LibraryError>] = [:]
+    private func details(of ids: [Int]) async throws(RequestError) -> [Book] {
+        let results = await withTaskGroup(of: (Int, Result<Book, RequestError>).self) { group in
+            var results: [Int: Result<Book, RequestError>] = [:]
             var pending = ids.enumerated().makeIterator()
             func addNext() {
                 guard let (index, id) = pending.next() else { return }
                 group.addTask {
-                    do throws(LibraryError) { return (index, .success(try await book(id))) } catch { return (index, .failure(error)) }
+                    do throws(RequestError) { return (index, .success(try await book(id))) } catch { return (index, .failure(error)) }
                 }
             }
             for _ in 0 ..< Self.concurrentDetails { addNext() }
@@ -119,10 +105,10 @@ private struct LibraryClient {
             }
             return results
         }
-        return try ids.indices.map { index throws(LibraryError) in try results[index]!.get() }
+        return try ids.indices.map { index throws(RequestError) in try results[index]!.get() }
     }
 
-    private func book(_ id: Int) async throws(LibraryError) -> Book {
+    private func book(_ id: Int) async throws(RequestError) -> Book {
         let detail = try await get(Detail.self, "app/books/\(id)")
         var files: [BookFile] = []
         for file in detail.files ?? [] where file.book != false {
@@ -154,7 +140,7 @@ private struct LibraryClient {
     }
 
     /// Grimmory files Opus under AUDIOBOOK. A folder audiobook's own extension is absent, so its Tracks are checked.
-    private func isSupported(_ file: Detail.File, format: BookFile.Format, bookID: Int) async throws(LibraryError) -> Bool {
+    private func isSupported(_ file: Detail.File, format: BookFile.Format, bookID: Int) async throws(RequestError) -> Bool {
         switch format {
         case .epub, .pdf: return true
         case .mobi, .azw3, .fb2, .comic, .other: return false
@@ -173,14 +159,15 @@ private struct LibraryClient {
 
     func image(for cover: Cover) async -> Data? {
         let name = cover.kind == .audiobook ? "audiobook-thumbnail" : "thumbnail"
-        guard let (status, data) = try? await send(request("media/book/\(cover.bookID)/\(name)", query: [:])),
-              status == 200
+        guard let request = request("media/book/\(cover.bookID)/\(name)", query: [:]),
+              let (status, data) = try? await account.send(request), status == 200
         else { return nil }
         return data
     }
 
-    private func get<T: Decodable>(_ type: T.Type, _ path: String, query: [String: String] = [:]) async throws(LibraryError) -> T {
-        let (status, data) = try await send(request(path, query: query))
+    private func get<T: Decodable>(_ type: T.Type, _ path: String, query: [String: String] = [:]) async throws(RequestError) -> T {
+        guard let request = request(path, query: query) else { throw .signedOut }
+        let (status, data) = try await account.send(request)
         switch status {
         case 200:
             do {
@@ -188,27 +175,15 @@ private struct LibraryClient {
             } catch {
                 throw .serverChanged
             }
-        case 401: throw .signedOut
         default: throw .serverChanged
         }
     }
 
-    private func request(_ path: String, query: [String: String]) -> URLRequest {
-        var url = server.appending(path: "api/v1/\(path)")
+    private func request(_ path: String, query: [String: String]) -> URLRequest? {
+        guard var url = server?.appending(path: "api/v1/\(path)") else { return nil }
         if !query.isEmpty {
             url.append(queryItems: query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) })
         }
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        return request
-    }
-
-    private func send(_ request: URLRequest) async throws(LibraryError) -> (Int, Data) {
-        do {
-            let (data, response) = try await urlSession.data(for: request)
-            return ((response as? HTTPURLResponse)?.statusCode ?? 0, data)
-        } catch {
-            throw .unreachable
-        }
+        return URLRequest(url: url)
     }
 }
