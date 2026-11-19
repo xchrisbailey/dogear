@@ -16,6 +16,7 @@ struct LibraryView: View {
     @State private var hasLoaded = false
     @State private var problem: RequestError?
     @State private var reading: OpenBookFile?
+    @State private var downloadProblem: String?
     @Environment(AppModel.self) private var model
 
     private var query: Query { Query(scope: scope, search: search, kind: kind) }
@@ -35,17 +36,25 @@ struct LibraryView: View {
             .pickerStyle(.segmented)
             .listRowSeparator(.hidden)
             ForEach(books) { book in
-                if let file = Self.readable(book) {
-                    Button {
-                        Task { await open(file, of: book) }
-                    } label: {
+                Group {
+                    if let file = Self.readable(book) {
+                        Button {
+                            Task { await open(file, of: book) }
+                        } label: {
+                            BookRow(book: book, library: library)
+                        }
+                        .foregroundStyle(.primary)
+                    } else {
                         BookRow(book: book, library: library)
                     }
-                    .foregroundStyle(.primary)
-                } else {
-                    BookRow(book: book, library: library)
                 }
+                .contextMenu { DownloadMenu(book: book, problem: $downloadProblem) }
             }
+        }
+        .alert("Couldn't download", isPresented: Binding { downloadProblem != nil } set: { if !$0 { downloadProblem = nil } }) {
+            Button("OK") {}
+        } message: {
+            Text(downloadProblem ?? "")
         }
         .navigationTitle(navigation.name(of: scope))
         .searchable(text: $search, prompt: "Title or author")
@@ -161,7 +170,10 @@ struct BookRow: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                BookFileFormats(files: book.files)
+                HStack {
+                    BookFileFormats(files: book.files)
+                    DownloadBadge(book: book)
+                }
             }
         }
         .accessibilityElement(children: .combine)

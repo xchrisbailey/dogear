@@ -98,3 +98,18 @@ extension Navigation {
         }
     }
 }
+
+extension DownloadError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .notAllowed:
+            "Your Grimmory account isn't allowed to download."
+        case .notSupported:
+            "Dogear can't open this format, so it can't download it."
+        case .couldNotSave:
+            "Couldn't save the Download on this device. Check your free space."
+        case let .request(error):
+            error.errorDescription
+        }
+    }
+}

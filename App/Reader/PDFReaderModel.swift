@@ -4,7 +4,7 @@ import Foundation
 @preconcurrency import ReadiumShared
 @preconcurrency import ReadiumStreamer
 
-/// Opens a Server PDF in Readium's navigator, keeps the reader's Position on the device and
+/// Opens a Server PDF, or its Download, in Readium's navigator, keeps the reader's Position on the device and
 /// shares it with Grimmory's web reader as a page number.
 @Observable
 final class PDFReaderModel: PDFNavigatorDelegate {
@@ -23,6 +23,10 @@ final class PDFReaderModel: PDFNavigatorDelegate {
 
     private let bookFileID: Int
     private let pdf: ServerPDF
+    /// The Download's file; nil fetches the PDF from the Server.
+    private let downloaded: URL?
+    /// The fetched copy, deleted on close: keeping it would be a Download the account may not be allowed.
+    private var fetched: URL?
     private let positions: Positions?
     private let sharedPositions: SharedPositions?
     private let pageTurns = DirectionalNavigationAdapter()
@@ -32,8 +36,9 @@ final class PDFReaderModel: PDFNavigatorDelegate {
     private var pushing: Task<Void, Never>?
     private static let pushDelay = Duration.seconds(3)
 
-    init(pdf: ServerPDF, bookFileID: Int, positions: Positions?, sharedPositions: SharedPositions?) {
+    init(pdf: ServerPDF, downloaded: URL?, bookFileID: Int, positions: Positions?, sharedPositions: SharedPositions?) {
         self.pdf = pdf
+        self.downloaded = downloaded
         self.bookFileID = bookFileID
         self.positions = positions
         self.sharedPositions = sharedPositions
@@ -62,33 +67,20 @@ final class PDFReaderModel: PDFNavigatorDelegate {
         }
     }
 
-    /// PDFKit can't read from a stream, so the whole PDF is fetched into Caches (not a Download)
-    /// and opened from there.
+    /// PDFKit can't read from a stream, so without a Download the whole PDF is fetched into a
+    /// temporary file and opened from there.
     private func openPublication() async throws -> Publication {
-        let file = try await fetch()
+        let file = if let downloaded { downloaded } else { try await fetch() }
         guard let url = FileURL(url: file) else { throw OpenError.notAFile }
         let httpClient = DefaultHTTPClient()
         let asset = try await AssetRetriever(httpClient: httpClient).retrieve(url: url, mediaType: .pdf).get()
-        let opener = PublicationOpener(parser: DefaultPublicationParser(
-            httpClient: httpClient,
-            assetRetriever: AssetRetriever(httpClient: httpClient),
-            pdfFactory: DefaultPDFDocumentFactory()
-        ))
-        return try await opener.open(asset: asset, allowUserInteraction: false).get()
+        return try await publicationOpener(httpClient: httpClient).open(asset: asset, allowUserInteraction: false).get()
     }
 
     private func fetch() async throws -> URL {
-        let directory = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-            .appending(path: "PDFs")
-        let file = directory.appending(path: "\(pdf.bookID).pdf")
-        do {
-            let contents = try await pdf.contents()
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            try contents.write(to: file, options: .atomic)
-        } catch {
-            // Offline, the copy from the last time it opened still reads, if iOS hasn't purged it.
-            guard FileManager.default.fileExists(atPath: file.path) else { throw error }
-        }
+        let file = FileManager.default.temporaryDirectory.appending(path: "\(pdf.bookID)-\(UUID().uuidString).pdf")
+        try await pdf.contents().write(to: file, options: .atomic)
+        fetched = file
         return file
     }
 
@@ -157,6 +149,8 @@ final class PDFReaderModel: PDFNavigatorDelegate {
 
     /// Pushes the last page read now rather than after the delay. Failures stay in the Outbox.
     func close() async {
+        if let fetched { try? FileManager.default.removeItem(at: fetched) }
+        fetched = nil
         pushing?.cancel()
         await recording?.value
         guard let positions, let sharedPositions else { return }

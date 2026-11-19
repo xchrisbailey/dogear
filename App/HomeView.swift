@@ -13,6 +13,8 @@ struct HomeView: View {
     @State private var scope: BookScope? = .everything
     @State private var navigation = Navigation()
     @State private var preferredColumn = NavigationSplitViewColumn.detail
+    @State private var isShowingDownloads = false
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         NavigationSplitView(preferredCompactColumn: $preferredColumn) {
@@ -45,8 +47,13 @@ struct HomeView: View {
                 }
                 .toolbar {
                     OutboxIndicator()
+                    // Downloads made before the account lost `canDownload` still need managing.
+                    if model.downloadList.canDownload || !model.downloadList.downloads.isEmpty {
+                        Button("Downloads", systemImage: "arrow.down.circle") { isShowingDownloads = true }
+                    }
                     SignOutButton()
                 }
+                .sheet(isPresented: $isShowingDownloads) { DownloadsView() }
             }
         }
     }

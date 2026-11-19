@@ -4,7 +4,7 @@ import MediaPlayer
 import os
 import UIKit
 
-/// Streams a Server audiobook, keeps the listener's Position on the device and shares it with
+/// Streams a Server audiobook, or plays its Download, keeps the listener's Position on the device and shares it with
 /// Grimmory's web player.
 ///
 /// A single-file audiobook is one player item at Track 0; a folder audiobook queues one item per
@@ -29,7 +29,7 @@ final class AudiobookPlayerModel {
 
     let title: String
     private let author: String?
-    private let audiobook: ServerAudiobook
+    private let audiobook: any AudiobookSource
     private let positions: Positions?
     private let sharedPositions: SharedPositions?
     private let cover: () async -> Data?
@@ -55,7 +55,7 @@ final class AudiobookPlayerModel {
     private static let log = Logger(subsystem: "com.xchrisbailey.Dogear", category: "Player")
 
     init(
-        audiobook: ServerAudiobook, title: String, author: String?,
+        audiobook: any AudiobookSource, title: String, author: String?,
         positions: Positions?, sharedPositions: SharedPositions?, cover: @escaping () async -> Data?
     ) {
         self.audiobook = audiobook
