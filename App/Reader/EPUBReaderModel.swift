@@ -24,6 +24,7 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
 
     var preferences: EPUBPreferences {
         didSet {
+            moves.relocated()
             navigator?.submitPreferences(preferences)
             ReadingPreferences.save(preferences)
         }
@@ -41,6 +42,7 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     private var publication: Publication?
     private let pageTurns = DirectionalNavigationAdapter()
     private let recorder: PositionRecorder
+    private var moves = ReaderMoves()
     private var bridge: CFIBridge?
     /// A Shared position's CFI to land on once the navigator can run scripts.
     private var pendingCFI: String?
@@ -81,6 +83,7 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
                 bridge = CFIBridge(navigator: navigator, publication: publication, spine: spine)
             }
             navigator.delegate = self
+            navigator.addObserver(ReaderInput { [weak self] in self?.moves.readerMoved() })
             pageTurns.bind(to: navigator)
             state = .reading(navigator)
         } catch {
@@ -110,8 +113,14 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
             return locator
         }
         // From elsewhere: land on the CFI once the page can run scripts. Until then, and if it
-        // doesn't resolve, the Chapter and spot in it, then the spot in the whole Book file.
+        // doesn't resolve, the fallback.
         pendingCFI = saved.cfi
+        return await fallbackLocation(for: saved, in: publication)
+    }
+
+    /// Where a Position without this device's reader state lands when its CFI doesn't resolve:
+    /// the Chapter and spot in it, then the spot in the whole Book file.
+    private func fallbackLocation(for saved: EPUBLocation, in publication: Publication) async -> Locator? {
         if let href = AnyURL(string: saved.href), let link = publication.readingOrder.firstWithHREF(href),
            var locator = await publication.locate(link) {
             locator.locations.progression = saved.throughChapter
@@ -121,7 +130,30 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     }
 
     func go(to link: Link) async {
+        moves.readerMoved()
         _ = await navigator?.go(to: link, options: NavigatorGoOptions(animated: false))
+    }
+
+    /// The page is being laid out again: its size changed or the app came back.
+    func relocated() {
+        moves.relocated()
+    }
+
+    /// Back in the app: if the reader read on elsewhere meanwhile, moves there rather than
+    /// keeping an older spot that the next page turn would share over it (ADR 0002).
+    func catchUp() async {
+        // Readium lays the page out again on becoming active.
+        moves.relocated()
+        guard hasLanded, let positions, let sharedPositions, let publication,
+              let newer = try? await positions.catchUp(.epub, bookID: epub.bookID, bookFileID: bookFileID, from: sharedPositions),
+              case let .epub(saved) = newer.location,
+              // The reader carried on here while the Server was asked.
+              !moves.isReading
+        else { return }
+        if let cfi = saved.cfi, let bridge, await bridge.go(to: cfi) { return }
+        if let locator = await fallbackLocation(for: saved, in: publication) {
+            _ = await navigator?.go(to: locator, options: NavigatorGoOptions(animated: false))
+        }
     }
 
     /// The Chapter the reader is in: the deepest table of contents entry for the current resource.
@@ -150,12 +182,13 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
             if landing == nil { landing = Task { await land() } }
             return
         }
+        guard moves.isReading else { return }
         record(locator, share: true)
     }
 
     /// Scripts only run once the navigator has shown its first page, so a Shared position's CFI
     /// is resolved from there. Where the reader lands is recorded but not shared: it's where
-    /// they already were.
+    /// they already were. Locations after it are recorded once the reader moves.
     private func land() async {
         if let bridge, let cfi = pendingCFI {
             // If it doesn't resolve, the reader stays on the fallback they opened at.
@@ -199,6 +232,8 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     }
 
     func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
+        // The tap itself counted as the reader moving; showing or hiding the controls only resizes the page.
+        moves.relocated()
         isShowingControls.toggle()
     }
 
@@ -208,6 +243,26 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
 
     private enum OpenError: Error {
         case invalidAddress
+    }
+}
+
+/// Reports every touch and key press on the page: a page turn, scroll or swipe starts with one,
+/// while a relocation never does.
+final class ReaderInput: InputObserving {
+    private let onInput: () -> Void
+
+    init(onInput: @escaping () -> Void) {
+        self.onInput = onInput
+    }
+
+    func didReceive(_ event: PointerEvent) async -> Bool {
+        if event.phase == .down { onInput() }
+        return false
+    }
+
+    func didReceive(_ event: KeyEvent) async -> Bool {
+        if event.phase == .down { onInput() }
+        return false
     }
 }
 

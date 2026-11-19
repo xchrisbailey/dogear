@@ -105,11 +105,26 @@ final class PDFReaderModel: PDFNavigatorDelegate {
         _ = await navigator?.go(to: link, options: NavigatorGoOptions(animated: false))
     }
 
+    /// Back in the app: if the reader read on elsewhere meanwhile, moves there rather than
+    /// keeping an older page that the next page turn would share over it (ADR 0002).
+    func catchUp() async {
+        guard hasLanded, let positions, let sharedPositions, let publication = navigator?.publication,
+              let newer = try? await positions.catchUp(.pdf, bookID: pdf.bookID, bookFileID: bookFileID, from: sharedPositions),
+              case let .pdf(saved) = newer.location, let link = publication.readingOrder.first
+        else { return }
+        // Already the latest Position, so arriving there isn't new reading.
+        page = saved.page
+        let locator = Locator(href: link.url(), mediaType: .pdf, locations: .init(fragments: ["page=\(saved.page)"], position: saved.page))
+        _ = await navigator?.go(to: locator, options: NavigatorGoOptions(animated: false))
+    }
+
     // MARK: PDFNavigatorDelegate
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         guard let page = locator.locations.page ?? locator.locations.position else { return }
-        // Spreads and zooming report the same page again; only a new page is new reading.
+        // Spreads, zooming and showing or hiding the controls report the same page again; only a
+        // new page is new reading. PDFKit's swipes don't reach Readium's input observers, so pages
+        // can't be told apart by what caused them as EPUB locations are.
         guard page != self.page else { return }
         self.page = page
         record(page, share: hasLanded)

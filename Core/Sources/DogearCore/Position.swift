@@ -23,6 +23,23 @@ public struct Position: Codable, Sendable, Equatable {
             case let .audiobook(location): location.throughBook
             }
         }
+
+        /// Whether `other` is this spot as the Server hands it back: it keeps less than the
+        /// device records (no reader state, no spot in the Chapter), so only what it keeps is compared.
+        func isSameSpot(as other: Location) -> Bool {
+            switch (self, other) {
+            case let (.epub(a), .epub(b)):
+                if let cfiA = a.cfi, let cfiB = b.cfi { return cfiA == cfiB }
+                // Percentages come back rounded.
+                return a.href == b.href && abs(a.throughBook - b.throughBook) < 0.0005
+            case let (.pdf(a), .pdf(b)):
+                return a.page == b.page
+            case let (.audiobook(a), .audiobook(b)):
+                return a.trackIndex == b.trackIndex && a.milliseconds == b.milliseconds
+            default:
+                return false
+            }
+        }
     }
 
     public var bookFileID: Int

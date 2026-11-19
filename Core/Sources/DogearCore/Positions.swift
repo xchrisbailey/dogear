@@ -36,6 +36,24 @@ public actor Positions {
         return position
     }
 
+    /// The Shared position to move an open reader or player to, when it's reading done elsewhere
+    /// since the latest Position here (ADR 0002). It's adopted as the latest here and any Outbox
+    /// entry for the Book file, now Stale, is dropped. nil when the reading here is as new, or the
+    /// Shared position is the one this device sent, which the Server stamps with its later time.
+    public func catchUp(
+        _ format: BookFile.Format, bookID: Int, bookFileID: Int, from shared: SharedPositions
+    ) async throws(RequestError) -> Position? {
+        guard let newer = try await shared.latest(format, bookID: bookID, bookFileID: bookFileID) else { return nil }
+        if let local = await cache.position(bookFileID: bookFileID),
+           local.recordedAt >= newer.recordedAt || local.location.isSameSpot(as: newer.location) {
+            return nil
+        }
+        try? await cache.adopt(newer)
+        await announceOutboxCount()
+        announceChange()
+        return newer
+    }
+
     public func latest(bookFileID: Int) async -> Position? {
         await cache.position(bookFileID: bookFileID)
     }
@@ -264,6 +282,21 @@ struct WaitingPosition: Sendable {
             } else {
                 modelContext.insert(StoredPosition(bookFileID: newer.bookFileID, payload: payload))
             }
+        }
+        try modelContext.save()
+    }
+
+    /// Takes the Server's `newer` Position as the latest, dropping the Book file's Outbox entry
+    /// if it was recorded before it.
+    func adopt(_ newer: Position) throws {
+        if let entry = entry(newer.bookFileID), entry.recordedAt < newer.recordedAt {
+            modelContext.delete(entry)
+        }
+        let payload = try JSONEncoder().encode(newer)
+        if let stored = stored(newer.bookFileID) {
+            stored.payload = payload
+        } else {
+            modelContext.insert(StoredPosition(bookFileID: newer.bookFileID, payload: payload))
         }
         try modelContext.save()
     }
