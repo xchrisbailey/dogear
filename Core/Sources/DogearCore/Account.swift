@@ -33,6 +33,12 @@ public actor Account {
 
     public func signIn(address: String, username: String, password: String) async throws(SignInError) -> Session {
         let server = try ServerAddress.parse(address)
+        // Signing in again after the sign-in expired. The Outbox, Downloads and cached library
+        // belong to that account, so another one starts only after signing out, which warns
+        // about what would be lost.
+        if let current = session, !ServerAddress.isSame(current.server, server) || current.username != username {
+            throw .differentAccount
+        }
         let client = GrimmoryClient(server: server, urlSession: urlSession)
         try await client.confirmIsGrimmory()
         let tokens = try await client.login(username: username, password: password)
@@ -289,4 +295,6 @@ public enum SignInError: Error, Equatable {
     case rateLimited
     case defaultPassword
     case serverChanged
+    /// Signing in again as another account or to another Server while still signed in.
+    case differentAccount
 }

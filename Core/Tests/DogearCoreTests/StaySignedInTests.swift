@@ -94,6 +94,27 @@ struct StaySignedInTests {
         #expect(tokenStore.session?.needsSignIn == false)
     }
 
+    @Test func signingInAgainAsSomeoneElseIsRefusedUntilSignedOut() async throws {
+        let account = try await signedInAccount()
+        server.state.withLock { $0.accounts.append(FakeGrimmory.Account(username: "guest", password: "battery staple")) }
+        server.expireAccessTokens()
+        server.revokeRefreshTokens()
+        _ = try? await account.send(versionRequest)
+
+        // The Outbox and Downloads belong to the expired account, so they mustn't carry over.
+        await #expect(throws: SignInError.differentAccount) {
+            try await account.signIn(address: FakeGrimmory.address, username: "guest", password: "battery staple")
+        }
+        await #expect(throws: SignInError.differentAccount) {
+            try await account.signIn(address: "https://other.example", username: "reader", password: "correct horse")
+        }
+
+        #expect(await account.session?.username == "reader")
+        #expect(await account.session?.needsSignIn == true)
+        #expect(server.requests.filter { $0.path == "/api/v1/auth/login" }.count == 1)
+        #expect(SignInError.differentAccount.errorDescription == "This device is signed in to a different Server or account. Sign out first, then sign in.")
+    }
+
     @Test func unreachableServerDuringRefreshKeepsTheReaderSignedIn() async throws {
         let account = try await signedInAccount()
         server.expireAccessTokens()

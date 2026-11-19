@@ -19,6 +19,8 @@ extension SignInError: LocalizedError {
             "This account still uses Grimmory's default password. Sign in to Grimmory in a browser, change your password, then come back."
         case .serverChanged:
             "The Server's responses have changed shape. Update Dogear."
+        case .differentAccount:
+            "This device is signed in to a different Server or account. Sign out first, then sign in."
         case .couldNotSaveSession:
             "Signed in, but couldn't save your sign-in on this device. Try again."
         }
