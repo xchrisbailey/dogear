@@ -24,6 +24,22 @@ struct NeedsSignInBanner: View {
     }
 }
 
+/// Offline mode, or a Server that has changed under Dogear. Either way the local library and
+/// the Outbox carry on.
+struct ServerStatusBanner: View {
+    let status: ServerStatus
+
+    var body: some View {
+        if let message = status.message {
+            Label(message, systemImage: status.hasChanged ? "exclamationmark.arrow.triangle.2.circlepath" : "wifi.slash")
+                .font(.footnote)
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(status.hasChanged ? Color.red.opacity(0.15) : Color.secondary.opacity(0.15))
+        }
+    }
+}
+
 struct SignOutButton: View {
     @Environment(AppModel.self) private var model
     @State private var isConfirming = false
