@@ -1,3 +1,4 @@
+import AVKit
 import DogearCore
 import SwiftUI
 
@@ -95,13 +96,77 @@ struct AudiobookPlayerView: View {
                     .background(.orange.opacity(0.2), in: .rect(cornerRadius: 8))
             }
             scrubber
+            transport
+            HStack {
+                speedMenu
+                Spacer()
+                RoutePicker()
+                    .frame(width: 44, height: 44)
+                Spacer()
+                sleepMenu
+            }
+        }
+    }
+
+    private var transport: some View {
+        HStack(spacing: 40) {
+            Button("Back \(Int(AudiobookPlayerModel.skipBack.seconds)) seconds", systemImage: "gobackward.15") {
+                model.skip(by: .zero - AudiobookPlayerModel.skipBack)
+            }
+            .font(.system(size: 32))
             Button(model.isPlaying ? "Pause" : "Play", systemImage: model.isPlaying ? "pause.fill" : "play.fill") {
                 model.togglePlayback()
             }
-            .labelStyle(.iconOnly)
             .font(.system(size: 56))
-            .buttonStyle(.plain)
+            Button("Forward \(Int(AudiobookPlayerModel.skipForward.seconds)) seconds", systemImage: "goforward.30") {
+                model.skip(by: AudiobookPlayerModel.skipForward)
+            }
+            .font(.system(size: 32))
         }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.plain)
+    }
+
+    private var speedMenu: some View {
+        Menu {
+            Picker("Speed", selection: Binding { model.speed } set: { model.setSpeed($0) }) {
+                ForEach(AudiobookPlayerModel.speeds, id: \.self) { speed in
+                    Text(Self.format(speed: speed)).tag(speed)
+                }
+            }
+        } label: {
+            Text(Self.format(speed: model.speed))
+                .monospacedDigit()
+                .frame(minWidth: 64, alignment: .leading)
+        }
+        .accessibilityLabel("Speed \(Self.format(speed: model.speed))")
+    }
+
+    private var sleepMenu: some View {
+        Menu {
+            if model.sleepTimer != nil {
+                Button("Turn Off", systemImage: "moon.zzz") { model.setSleepTimer(nil) }
+            }
+            Button("End of Chapter") { model.setSleepTimer(.endOfChapter) }
+            ForEach([5, 15, 30, 45, 60], id: \.self) { minutes in
+                Button("\(minutes) minutes") { model.setSleepTimer(.after(.seconds(minutes * 60))) }
+            }
+        } label: {
+            Label(sleepLabel, systemImage: model.sleepTimer == nil ? "moon" : "moon.fill")
+                .monospacedDigit()
+                .frame(minWidth: 64, alignment: .trailing)
+        }
+        .accessibilityLabel(model.sleepTimer == nil ? "Sleep timer" : "Sleep timer, \(sleepLabel)")
+    }
+
+    private var sleepLabel: String {
+        guard let timer = model.sleepTimer else { return "Sleep" }
+        if let remaining = timer.remaining { return Self.format(remaining.seconds.rounded(.up)) }
+        return "Chapter end"
+    }
+
+    static func format(speed: Float) -> String {
+        speed.formatted(.number.precision(.fractionLength(0 ... 2))) + "×"
     }
 
     /// Whole-book time; Chapters are in the list.
@@ -132,6 +197,17 @@ struct AudiobookPlayerView: View {
     static func format(_ seconds: Double) -> String {
         Duration.seconds(seconds.rounded(.down)).formatted(.time(pattern: seconds >= 3600 ? .hourMinuteSecond : .minuteSecond))
     }
+}
+
+/// The system's AirPlay and Bluetooth route picker.
+private struct RoutePicker: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let picker = AVRoutePickerView()
+        picker.prioritizesVideoDevices = false
+        return picker
+    }
+
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
 }
 
 private struct ChaptersView: View {

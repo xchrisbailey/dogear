@@ -8,7 +8,7 @@ public struct LibraryStore: Sendable {
     public init(url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         container = try ModelContainer(
-            for: CachedBook.self, CachedCover.self, CachedNavigation.self,
+            for: CachedBook.self, CachedCover.self, CachedNavigation.self, CachedContinueRows.self,
             configurations: ModelConfiguration(url: url)
         )
     }
@@ -36,6 +36,15 @@ public struct LibraryStore: Sendable {
 
 /// A single row: the libraries and shelves from the last refresh.
 @Model final class CachedNavigation {
+    var payload: Data
+
+    init(payload: Data) {
+        self.payload = payload
+    }
+}
+
+/// A single row: the Server's continue rows from the last refresh.
+@Model final class CachedContinueRows {
     var payload: Data
 
     init(payload: Data) {
@@ -75,6 +84,17 @@ public struct LibraryStore: Sendable {
         try modelContext.save()
     }
 
+    func continueRows() -> ServerContinueRows {
+        let cached = (try? modelContext.fetch(FetchDescriptor<CachedContinueRows>()))?.first
+        return cached.flatMap { try? JSONDecoder().decode(ServerContinueRows.self, from: $0.payload) } ?? ServerContinueRows()
+    }
+
+    func replace(_ continueRows: ServerContinueRows) throws {
+        try modelContext.delete(model: CachedContinueRows.self)
+        modelContext.insert(CachedContinueRows(payload: try JSONEncoder().encode(continueRows)))
+        try modelContext.save()
+    }
+
     func image(for cover: Cover) -> Data? {
         let key = Self.key(cover)
         var descriptor = FetchDescriptor<CachedCover>(predicate: #Predicate { $0.key == key })
@@ -91,6 +111,7 @@ public struct LibraryStore: Sendable {
         try modelContext.delete(model: CachedBook.self)
         try modelContext.delete(model: CachedCover.self)
         try modelContext.delete(model: CachedNavigation.self)
+        try modelContext.delete(model: CachedContinueRows.self)
         try modelContext.save()
     }
 

@@ -30,6 +30,8 @@ final class AppModel {
     /// Positions waiting for the Server.
     private(set) var outboxCount = 0
     private(set) var serverStatus = ServerStatus()
+    /// Continue Reading and Continue Listening, kept current as Positions change here or on the Server.
+    private(set) var continueRows = ContinueRows()
 
     init(account: Account) {
         self.account = account
@@ -169,8 +171,26 @@ final class AppModel {
     }
 
     /// Failures leave the Outbox as it is for the next try; the indicator shows it's waiting.
+    /// Afterwards the Server's continue rows include what was just sent.
     func flushOutbox() async {
         try? await positions?.flushOutbox(to: sharedPositions)
+        try? await library?.refreshContinueRows()
+        await showContinueRows()
+    }
+
+    /// Recomputes the rows from the cache and this device's Positions, which works offline.
+    func showContinueRows() async {
+        guard let library else { return }
+        continueRows = await library.continueRows(including: await positions?.all() ?? [])
+    }
+
+    func observePositions() async {
+        guard let positions else { return }
+        let changes = await positions.changes()
+        await showContinueRows()
+        for await _ in changes {
+            await showContinueRows()
+        }
     }
 
     func signIn(address: String, username: String, password: String) async throws(SignInError) {
@@ -183,6 +203,7 @@ final class AppModel {
         await library?.forget()
         await positions?.forget()
         await downloads?.removeAll()
+        continueRows = ContinueRows()
         session = nil
     }
 }
@@ -211,6 +232,7 @@ struct RootView: View {
         .task { await model.observeSession() }
         .task { await model.observeOutbox() }
         .task { await model.observeDownloads() }
+        .task { await model.observePositions() }
         .task { await model.observeServerStatus() }
         .task { await model.retryWhileOffline() }
         // Coming back to the app is the likeliest moment the Server is reachable again.
