@@ -19,7 +19,7 @@ struct ListenAudiobookTests {
         let shared = SharedPositions(account: try await signedIn())
         let position = Position(
             bookFileID: 5,
-            location: .audiobook(AudiobookLocation(trackIndex: 0, milliseconds: 41_369_321, bookProgress: 41_369_321 / 58_253_000)),
+            location: .audiobook(AudiobookLocation(trackIndex: 0, milliseconds: 41_369_321, throughBook: 41_369_321 / 58_253_000)),
             recordedAt: Date(timeIntervalSince1970: 1_800_000_000)
         )
 
@@ -47,7 +47,7 @@ struct ListenAudiobookTests {
 
         #expect(position.bookFileID == 5)
         #expect(position.recordedAt == ISO8601DateFormatter().date(from: "2026-11-19T15:40:00Z"))
-        #expect(position.location == .audiobook(AudiobookLocation(trackIndex: 0, milliseconds: 41_369_321, bookProgress: 0.71)))
+        #expect(position.location == .audiobook(AudiobookLocation(trackIndex: 0, milliseconds: 41_369_321, throughBook: 0.71)))
     }
 
     /// Fetches `url` as AVPlayer does: no Authorization header, the token rides in the query.
@@ -86,7 +86,7 @@ struct ListenAudiobookTests {
 
         // Saving the Position every few seconds is what notices the expired token while listening.
         let position = Position(
-            bookFileID: 5, location: .audiobook(AudiobookLocation(trackIndex: 0, milliseconds: 7_200_000, bookProgress: 0.12)),
+            bookFileID: 5, location: .audiobook(AudiobookLocation(trackIndex: 0, milliseconds: 7_200_000, throughBook: 0.12)),
             recordedAt: Date()
         )
         try await SharedPositions(account: account).push(position, bookID: 5)

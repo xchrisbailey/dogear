@@ -21,8 +21,6 @@ public struct ServerPDF: Sendable {
     /// The whole PDF. The reader loads a PDF fully into memory anyway, so there's nothing to
     /// gain from streaming it.
     public func contents() async throws(RequestError) -> Data {
-        let (status, data) = try await account.send(URLRequest(url: url))
-        guard status == 200 else { throw .serverChanged }
-        return data
+        try await account.fetchData(URLRequest(url: url))
     }
 }

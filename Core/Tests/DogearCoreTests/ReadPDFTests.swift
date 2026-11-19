@@ -17,7 +17,7 @@ struct ReadPDFTests {
         let shared = SharedPositions(account: try await signedIn())
         let position = Position(
             bookFileID: 21,
-            location: .pdf(PDFLocation(page: 12, bookProgress: 0.048)),
+            location: .pdf(PDFLocation(page: 12, throughBook: 0.048)),
             recordedAt: Date(timeIntervalSince1970: 1_800_000_000)
         )
 
@@ -42,7 +42,7 @@ struct ReadPDFTests {
         let position = try #require(try await shared.latest(.pdf, bookID: 9, bookFileID: 21))
 
         #expect(position.bookFileID == 21)
-        #expect(position.location == .pdf(PDFLocation(page: 12, bookProgress: 0.048)))
+        #expect(position.location == .pdf(PDFLocation(page: 12, throughBook: 0.048)))
         #expect(position.recordedAt == ISO8601DateFormatter().date(from: "2026-11-19T15:41:00Z"))
         // An EPUB Position isn't a page.
         #expect(try await shared.latest(.epub, bookID: 9, bookFileID: 21) == nil)
@@ -78,11 +78,11 @@ struct ReadPDFTests {
         let storeURL = FileManager.default.temporaryDirectory
             .appending(path: "dogear-pdf-\(UUID().uuidString)").appending(path: "Positions.store")
         let reading = Positions(store: try PositionStore(url: storeURL), clock: clock)
-        try await reading.record(.pdf(PDFLocation(page: 40, bookProgress: 0.16)), bookFileID: 21, bookID: 9)
+        try await reading.record(.pdf(PDFLocation(page: 40, throughBook: 0.16)), bookFileID: 21, bookID: 9)
 
         try await reading.flushOutbox(to: shared)
 
         #expect(!server.requests.contains { $0.method == "PUT" })
-        #expect(await reading.latest(bookFileID: 21)?.location == .pdf(PDFLocation(page: 12, bookProgress: 0.048)))
+        #expect(await reading.latest(bookFileID: 21)?.location == .pdf(PDFLocation(page: 12, throughBook: 0.048)))
     }
 }

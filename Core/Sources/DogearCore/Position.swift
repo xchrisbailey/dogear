@@ -7,19 +7,22 @@ public struct Position: Codable, Sendable, Equatable {
         case pdf(PDFLocation)
         case audiobook(AudiobookLocation)
 
-        public var format: Format {
+        public var format: BookFile.Format {
             switch self {
             case .epub: .epub
             case .pdf: .pdf
             case .audiobook: .audiobook
             }
         }
-    }
 
-    public enum Format: Sendable {
-        case epub
-        case pdf
-        case audiobook
+        /// 0…1 through the whole Book file.
+        public var throughBook: Double {
+            switch self {
+            case let .epub(location): location.throughBook
+            case let .pdf(location): location.throughBook
+            case let .audiobook(location): location.throughBook
+            }
+        }
     }
 
     public var bookFileID: Int
@@ -39,20 +42,29 @@ public struct EPUBLocation: Codable, Sendable, Equatable {
     /// The resource (Chapter file) within the EPUB, without a fragment.
     public var href: String
     /// 0…1 through the resource.
-    public var chapterProgress: Double
+    public var throughChapter: Double
     /// 0…1 through the whole Book file.
-    public var bookProgress: Double
-    /// Point CFI of the start of the visible range; nil until the CFI bridge (#6) fills it in.
+    public var throughBook: Double
+    /// Point CFI of the start of the visible range. nil when the reader couldn't generate one
+    /// (the EPUB's spine couldn't be read, or the page wasn't ready to run scripts), or when the
+    /// Shared position it came from had none.
     public var cfi: String?
     /// The reader's own serialised location, for resuming exactly on this device. Opaque to Core.
     public var readerState: String?
 
-    public init(href: String, chapterProgress: Double, bookProgress: Double, cfi: String? = nil, readerState: String? = nil) {
+    public init(href: String, throughChapter: Double, throughBook: Double, cfi: String? = nil, readerState: String? = nil) {
         self.href = href
-        self.chapterProgress = chapterProgress
-        self.bookProgress = bookProgress
+        self.throughChapter = throughChapter
+        self.throughBook = throughBook
         self.cfi = cfi
         self.readerState = readerState
+    }
+
+    // Positions and the Outbox are stored with the names these fields had before.
+    private enum CodingKeys: String, CodingKey {
+        case href, cfi, readerState
+        case throughChapter = "chapterProgress"
+        case throughBook = "bookProgress"
     }
 }
 
@@ -61,11 +73,17 @@ public struct PDFLocation: Codable, Sendable, Equatable {
     /// 1-based, as the web reader counts.
     public var page: Int
     /// 0…1 through the whole Book file; the web reader uses page ÷ page count.
-    public var bookProgress: Double
+    public var throughBook: Double
 
-    public init(page: Int, bookProgress: Double) {
+    public init(page: Int, throughBook: Double) {
         self.page = page
-        self.bookProgress = bookProgress
+        self.throughBook = throughBook
+    }
+
+    // Positions and the Outbox are stored with the names these fields had before.
+    private enum CodingKeys: String, CodingKey {
+        case page
+        case throughBook = "bookProgress"
     }
 }
 
@@ -75,11 +93,17 @@ public struct AudiobookLocation: Codable, Sendable, Equatable {
     /// Milliseconds into the Track.
     public var milliseconds: Int
     /// 0…1 through the whole Book file.
-    public var bookProgress: Double
+    public var throughBook: Double
 
-    public init(trackIndex: Int, milliseconds: Int, bookProgress: Double) {
+    public init(trackIndex: Int, milliseconds: Int, throughBook: Double) {
         self.trackIndex = trackIndex
         self.milliseconds = milliseconds
-        self.bookProgress = bookProgress
+        self.throughBook = throughBook
+    }
+
+    // Positions and the Outbox are stored with the names these fields had before.
+    private enum CodingKeys: String, CodingKey {
+        case trackIndex, milliseconds
+        case throughBook = "bookProgress"
     }
 }

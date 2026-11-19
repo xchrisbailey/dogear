@@ -27,12 +27,43 @@ struct FolderAudiobookTests {
         let location = info.location(at: .milliseconds(400_000))
         #expect(location.trackIndex == 1)
         #expect(location.milliseconds == 79_635)
-        #expect(abs(location.bookProgress - 0.018395) < 0.000001)
+        #expect(abs(location.throughBook - 0.018395) < 0.000001)
         #expect(info.location(at: .milliseconds(21_400_000)).trackIndex == 80)
         #expect(info.location(at: .milliseconds(21_400_000)).milliseconds == 99_640)
         // A Track's first millisecond belongs to it, not the one before.
         #expect(info.location(at: .milliseconds(320_365)).trackIndex == 1)
         #expect(info.location(at: .milliseconds(320_365)).milliseconds == 0)
+    }
+
+    @Test func newTokenRebuildsTheQueueFromThePlayingTrackAtTheSameSecond() async throws {
+        let account = try await signedIn()
+        let audiobook = try #require(await ServerAudiobook(account: account, bookID: 6))
+        var queue = AudiobookQueue(info: try await audiobook.info())
+        var streams = await audiobook.streamUpdates().makeAsyncIterator()
+        let first = try #require(await streams.next())
+        let opening = queue.streamChanged(to: first, at: .zero, hasWorkingItems: false)
+        let opened = try #require(opening)
+        #expect(opened.items.map(\.url.path) == (["0", "1", "2", "80"].map { "/api/v1/audiobooks/6/track/\($0)/stream" }))
+        // The same URLs again leave the playing items alone.
+        let repeated = queue.streamChanged(to: first, at: .milliseconds(400_000), hasWorkingItems: true)
+        #expect(repeated == nil)
+
+        // Saving the Position every few seconds is what notices the expired token while listening.
+        server.expireAccessTokens()
+        let position = Position(
+            bookFileID: 6, location: .audiobook(AudiobookLocation(trackIndex: 1, milliseconds: 79_635, throughBook: 0.018)),
+            recordedAt: Date()
+        )
+        try await SharedPositions(account: account).push(position, bookID: 6)
+        let refreshed = try #require(await streams.next())
+        let rebuilding = queue.streamChanged(to: refreshed, at: .milliseconds(400_000), hasWorkingItems: true)
+        let rebuilt = try #require(rebuilding)
+
+        // From the playing Track onwards, seeked to the same second within it.
+        #expect(rebuilt.items.map(\.url.path) == (["1", "2", "80"].map { "/api/v1/audiobooks/6/track/\($0)/stream" }))
+        #expect(rebuilt.items.allSatisfy { $0.url.query()?.contains("token=access-2") == true })
+        #expect(rebuilt.items.map(\.start) == [.milliseconds(320_365), .milliseconds(740_727), .milliseconds(21_300_360)])
+        #expect(rebuilt.seek == .milliseconds(79_635))
     }
 
     @Test func webPlayersPositionResumesOnItsTrackAndSecond() async throws {
@@ -88,7 +119,7 @@ struct FolderAudiobookTests {
     @Test func positionOnATrackTheServerNoLongerListsResumesAtTheEnd() async throws {
         let info = try await audiobook().info()
 
-        let gone = AudiobookLocation(trackIndex: 999, milliseconds: 5_000, bookProgress: 1)
+        let gone = AudiobookLocation(trackIndex: 999, milliseconds: 5_000, throughBook: 1)
 
         #expect(info.time(of: gone) == .milliseconds(21_744_676))
     }

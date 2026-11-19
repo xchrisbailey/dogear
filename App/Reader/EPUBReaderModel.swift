@@ -40,7 +40,7 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     private let httpClient: DefaultHTTPClient
     private var publication: Publication?
     private let pageTurns = DirectionalNavigationAdapter()
-    private var recording: Task<Void, Never>?
+    private let recorder: PositionRecorder
     private var bridge: CFIBridge?
     /// A Shared position's CFI to land on once the navigator can run scripts.
     private var pendingCFI: String?
@@ -56,6 +56,7 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
         self.bookFileID = bookFileID
         self.positions = positions
         self.sharedPositions = sharedPositions
+        recorder = PositionRecorder(bookID: epub.bookID, positions: positions, sharedPositions: sharedPositions)
         signer = EPUBRequestSigner(epub: epub)
         httpClient = DefaultHTTPClient(delegate: signer)
         preferences = ReadingPreferences.load()
@@ -113,10 +114,10 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
         pendingCFI = saved.cfi
         if let href = AnyURL(string: saved.href), let link = publication.readingOrder.firstWithHREF(href),
            var locator = await publication.locate(link) {
-            locator.locations.progression = saved.chapterProgress
+            locator.locations.progression = saved.throughChapter
             return locator
         }
-        return await publication.locate(progression: saved.bookProgress)
+        return await publication.locate(progression: saved.throughBook)
     }
 
     func go(to link: Link) async {
@@ -166,30 +167,16 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     }
 
     private func record(_ locator: Locator, share: Bool) {
-        // Chained so a slow save can't land after a newer one and win.
-        recording = Task { [previous = recording, bridge, positions, sharedPositions, bookFileID, bookID = epub.bookID] in
-            let location = Position.Location.epub(EPUBLocation(
+        recorder.record(bookFileID: bookFileID, share: share) { [bridge] in
+            .epub(EPUBLocation(
                 href: locator.href.removingFragment().string,
-                chapterProgress: locator.locations.progression ?? 0,
-                bookProgress: locator.locations.totalProgression ?? 0,
+                throughChapter: locator.locations.progression ?? 0,
+                throughBook: locator.locations.totalProgression ?? 0,
                 cfi: await bridge?.currentPosition(),
                 readerState: try? locator.jsonString()
             ))
-            await previous?.value
-            guard let positions else {
-                // Without the on-device store there's no Outbox; sharing directly is the best left.
-                if share {
-                    let position = Position(bookFileID: bookFileID, location: location, recordedAt: Date())
-                    try? await sharedPositions?.push(position, bookID: bookID)
-                }
-                return
-            }
-            if share {
-                _ = try? await positions.record(location, bookFileID: bookFileID, bookID: bookID)
-                self.pushSoon()
-            } else {
-                _ = try? await positions.recordLanding(location, bookFileID: bookFileID)
-            }
+        } afterSharing: {
+            self.pushSoon()
         }
     }
 
@@ -206,7 +193,7 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     /// Pushes the last page read now rather than after the delay. Failures stay in the Outbox.
     func close() async {
         pushing?.cancel()
-        await recording?.value
+        await recorder.finished()
         guard let positions, let sharedPositions else { return }
         try? await positions.flushOutbox(to: sharedPositions)
     }

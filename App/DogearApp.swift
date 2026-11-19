@@ -32,6 +32,8 @@ final class AppModel {
     private(set) var serverStatus = ServerStatus()
     /// Continue Reading and Continue Listening, kept current as Positions change here or on the Server.
     private(set) var continueRows = ContinueRows()
+    /// The latest Position in every Book file read on this device, for showing how far in each Book is.
+    private(set) var recordedPositions: [Position] = []
 
     init(account: Account) {
         self.account = account
@@ -180,8 +182,9 @@ final class AppModel {
 
     /// Recomputes the rows from the cache and this device's Positions, which works offline.
     func showContinueRows() async {
+        recordedPositions = await positions?.all() ?? []
         guard let library else { return }
-        continueRows = await library.continueRows(including: await positions?.all() ?? [])
+        continueRows = await library.continueRows(including: recordedPositions)
     }
 
     func observePositions() async {
@@ -204,6 +207,7 @@ final class AppModel {
         await positions?.forget()
         await downloads?.removeAll()
         continueRows = ContinueRows()
+        recordedPositions = []
         session = nil
     }
 }

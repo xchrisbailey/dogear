@@ -18,15 +18,15 @@ public struct SharedPositions: Sendable {
                 bookFileId: position.bookFileID,
                 positionData: location.cfi,
                 positionHref: location.href,
-                progressPercent: location.bookProgress * 100,
-                contentSourceProgressPercent: location.chapterProgress * 100
+                progressPercent: location.throughBook * 100,
+                contentSourceProgressPercent: location.throughChapter * 100
             ))
         case let .pdf(location):
             // The Server parses `positionData` as an integer for PDFs.
             body = FileProgressUpdate(fileProgress: .init(
                 bookFileId: position.bookFileID,
                 positionData: String(location.page),
-                progressPercent: location.bookProgress * 100
+                progressPercent: location.throughBook * 100
             ))
         case let .audiobook(location):
             body = FileProgressUpdate(fileProgress: .init(
@@ -34,7 +34,7 @@ public struct SharedPositions: Sendable {
                 positionData: String(location.milliseconds),
                 positionHref: String(location.trackIndex),
                 // Rounded to 0.1 like the web player's saves.
-                progressPercent: (location.bookProgress * 1000).rounded() / 10
+                progressPercent: (location.throughBook * 1000).rounded() / 10
             ))
         }
         var request = try await request(bookID: bookID)
@@ -45,7 +45,7 @@ public struct SharedPositions: Sendable {
     }
 
     /// The Book file's Shared position in `format`, or nil if it was never read anywhere.
-    public func latest(_ format: Position.Format, bookID: Int, bookFileID: Int) async throws(RequestError) -> Position? {
+    public func latest(_ format: BookFile.Format, bookID: Int, bookFileID: Int) async throws(RequestError) -> Position? {
         try await progress(bookID: bookID).position(format, bookFileID: bookFileID)
     }
 
@@ -107,17 +107,17 @@ public struct SharedPositions: Sendable {
 
         /// Compared by the format's own `updatedAt` rather than the Book's `lastReadTime`, which
         /// also moves when another of the Book's files is read.
-        func position(_ format: Position.Format, bookFileID: Int) -> Position? {
+        func position(_ format: BookFile.Format, bookFileID: Int) -> Position? {
             switch format {
             case .epub:
-                // The Server keeps it per Book and drops in-chapter progress, so `chapterProgress` is 0.
+                // The Server keeps it per Book and drops the spot in the Chapter, so `throughChapter` is 0.
                 guard let epub = epubProgress, let href = epub.href,
                       let recordedAt = epub.updatedAt.flatMap(SharedPositions.date)
                 else { return nil }
                 let location = EPUBLocation(
                     href: String(href.prefix { $0 != "#" }),
-                    chapterProgress: 0,
-                    bookProgress: (epub.percentage ?? 0) / 100,
+                    throughChapter: 0,
+                    throughBook: (epub.percentage ?? 0) / 100,
                     cfi: epub.cfi
                 )
                 return Position(bookFileID: bookFileID, location: .epub(location), recordedAt: recordedAt)
@@ -125,7 +125,7 @@ public struct SharedPositions: Sendable {
                 guard let pdf = pdfProgress, let page = pdf.page,
                       let recordedAt = pdf.updatedAt.flatMap(SharedPositions.date)
                 else { return nil }
-                let location = PDFLocation(page: page, bookProgress: (pdf.percentage ?? 0) / 100)
+                let location = PDFLocation(page: page, throughBook: (pdf.percentage ?? 0) / 100)
                 return Position(bookFileID: bookFileID, location: .pdf(location), recordedAt: recordedAt)
             case .audiobook:
                 guard let audiobook = audiobookProgress, let milliseconds = audiobook.positionMs,
@@ -135,9 +135,12 @@ public struct SharedPositions: Sendable {
                     // The web player only saves a Track for folder audiobooks.
                     trackIndex: audiobook.trackIndex ?? 0,
                     milliseconds: milliseconds,
-                    bookProgress: (audiobook.percentage ?? 0) / 100
+                    throughBook: (audiobook.percentage ?? 0) / 100
                 )
                 return Position(bookFileID: bookFileID, location: .audiobook(location), recordedAt: recordedAt)
+            case .mobi, .azw3, .fb2, .comic, .other:
+                // Dogear can't open these, so it never reads or records Positions in them.
+                return nil
             }
         }
     }

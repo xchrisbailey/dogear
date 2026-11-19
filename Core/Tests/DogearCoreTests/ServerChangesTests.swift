@@ -24,8 +24,8 @@ struct ServerChangesTests {
         Library(account: account, store: try LibraryStore(url: directory.appending(path: "Library.store")))
     }
 
-    func epub(_ bookProgress: Double) -> Position.Location {
-        .epub(EPUBLocation(href: "OEBPS/ch03.xhtml", chapterProgress: 0.5, bookProgress: bookProgress, cfi: "epubcfi(/6/8!/4/2/1:0)"))
+    func epub(_ throughBook: Double) -> Position.Location {
+        .epub(EPUBLocation(href: "OEBPS/ch03.xhtml", throughChapter: 0.5, throughBook: throughBook, cfi: "epubcfi(/6/8!/4/2/1:0)"))
     }
 
     @Test func pushAnsweredByAWebPageStaysInTheOutbox() async throws {
@@ -52,6 +52,29 @@ struct ServerChangesTests {
         #expect(await changed.cachedBooks() == cached)
         #expect(await account.serverStatus == ServerStatus(isReachable: true, hasChanged: true))
         #expect(RequestError.serverChanged.errorDescription == "The Server's responses have changed shape. Update Dogear.")
+    }
+
+    @Test func refusedOrMissingIsNotAChangedServer() async throws {
+        server.shelve([FakeGrimmory.flatland])
+        let account = try await signedIn()
+
+        let gone = try #require(await ServerPDF(account: account, bookID: 999))
+        await #expect(throws: RequestError.notFound) { try await gone.contents() }
+        // A Book outside the reader's assigned libraries.
+        server.answer("GET", "/api/v1/app/books", with: FakeGrimmory.fixture("error-403", status: 403))
+        await #expect(throws: RequestError.forbidden) { try await library(account).refresh() }
+
+        #expect(await account.serverStatus == ServerStatus())
+        #expect(RequestError.notFound.errorDescription == "This Book or Book file is no longer on your Server.")
+    }
+
+    @Test func serverErrorIsOfflineRatherThanAChangedServer() async throws {
+        let account = try await signedIn()
+        server.answer("GET", "/api/v1/libraries", with: .response(status: 500, body: Data(#"{"status":500}"#.utf8)))
+
+        await #expect(throws: RequestError.unreachable) { try await library(account).refresh() }
+
+        #expect(await account.serverStatus == ServerStatus(isReachable: false, hasChanged: false))
     }
 
     @Test func serverDownBehindItsProxyIsOfflineAndTheOutboxFlushesOnceItsBack() async throws {

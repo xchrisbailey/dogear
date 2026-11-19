@@ -56,7 +56,7 @@ struct ServerContinueRows: Codable, Sendable {
 
     private func entries(_ rows: [Row], kind: Kind, books: [Book], positions: [Position], limit: Int) -> [ContinueEntry] {
         let local = Dictionary(
-            positions.filter { kind.formats.contains($0.location.format.bookFileFormat) }.map { ($0.bookFileID, $0) },
+            positions.filter { kind.formats.contains($0.location.format) }.map { ($0.bookFileID, $0) },
             uniquingKeysWith: { $0.recordedAt >= $1.recordedAt ? $0 : $1 }
         )
         let serverTimes = Dictionary(rows.map { ($0.bookID, $0.lastRead) }, uniquingKeysWith: { first, _ in first })
@@ -71,7 +71,7 @@ struct ServerContinueRows: Codable, Sendable {
             let serverTime = serverTimes[book.id]
             if let newestLocal, serverTime.map({ newestLocal.recordedAt > $0 }) ?? true {
                 // Newer than the Server's row, so it decides, as the Server would once it arrives.
-                guard Self.isInProgress(newestLocal) else { continue }
+                guard Self.isStartedButUnfinished(newestLocal) else { continue }
             }
             guard let lastRead = [serverTime, newestLocal?.recordedAt].compactMap(\.self).max() else { continue }
             entries.append(ContinueEntry(book: book, file: file, lastRead: lastRead, position: newestLocal))
@@ -80,29 +80,8 @@ struct ServerContinueRows: Codable, Sendable {
     }
 
     /// Grimmory lists a Book once it's more than 0.1 % in and until it's 99.5 % through.
-    private static func isInProgress(_ position: Position) -> Bool {
-        let progress = position.location.bookProgress
-        return progress > 0.001 && progress < 0.995
-    }
-}
-
-extension Position.Format {
-    var bookFileFormat: BookFile.Format {
-        switch self {
-        case .epub: .epub
-        case .pdf: .pdf
-        case .audiobook: .audiobook
-        }
-    }
-}
-
-extension Position.Location {
-    /// 0…1 through the whole Book file.
-    public var bookProgress: Double {
-        switch self {
-        case let .epub(location): location.bookProgress
-        case let .pdf(location): location.bookProgress
-        case let .audiobook(location): location.bookProgress
-        }
+    private static func isStartedButUnfinished(_ position: Position) -> Bool {
+        let throughBook = position.location.throughBook
+        return throughBook > 0.001 && throughBook < 0.995
     }
 }

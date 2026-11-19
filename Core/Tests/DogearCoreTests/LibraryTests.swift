@@ -86,6 +86,41 @@ struct LibraryTests {
         #expect(await library.cachedBooks().map(\.id) == [14, 5])
     }
 
+    @Test func oneBookFailingDoesNotHoldUpTheRestOfTheLibrary() async throws {
+        let server = FakeGrimmory()
+        server.shelve([FakeGrimmory.mobyDick, FakeGrimmory.atomicHabits, FakeGrimmory.projectHailMary])
+        let library = try await signedInLibrary(on: server)
+        let before = try await library.refresh()
+        // Moby-Dick is deleted between the list and its detail; Atomic Habits' detail comes
+        // back in a shape Dogear can't read.
+        server.answer("GET", "/api/v1/app/books/21", with: FakeGrimmory.fixture("error-404-book", status: 404))
+        server.answer("GET", "/api/v1/app/books/4", with: .response(status: 200, body: Data(#"{"unexpected":true}"#.utf8)))
+
+        let books = try await library.refresh()
+
+        #expect(books.map(\.id) == [4, 5])
+        #expect(books.first == before[1])
+        #expect(await library.cachedBooks().map(\.id) == [4, 5])
+    }
+
+    @Test func eachBookShowsHowFarThroughItTheReaderIsHereOrElsewhere() async throws {
+        let server = FakeGrimmory()
+        server.shelve([FakeGrimmory.atomicHabits, FakeGrimmory.flatland, FakeGrimmory.mobyDick, FakeGrimmory.projectHailMary])
+        let books = try await signedInLibrary(on: server).refresh()
+        let clock = TestClock(Date(timeIntervalSince1970: 1_700_000_000))
+        let reading = Positions(store: try PositionStore(url: storeURL.deletingLastPathComponent().appending(path: "Positions.store")), clock: clock)
+        // Before the web reader's saves in Nov 2026, so those win for Atomic Habits.
+        try await reading.record(.epub(EPUBLocation(href: "OEBPS/ch01.xhtml", throughChapter: 0, throughBook: 0.02)), bookFileID: 4, bookID: 4)
+        // Only ever read here.
+        try await reading.record(.epub(EPUBLocation(href: "OEBPS/ch09.xhtml", throughChapter: 0, throughBook: 0.4)), bookFileID: 31, bookID: 21)
+        clock.advance(by: 100_000_000)
+        // Read here since the web reader's save.
+        try await reading.record(.pdf(PDFLocation(page: 30, throughBook: 0.12)), bookFileID: 21, bookID: 9)
+        let positions = await reading.all()
+
+        #expect(books.map { $0.throughBook(including: positions) } == [0.281341, 0.12, 0.4, nil])
+    }
+
     @Test func expiredAccessTokenDuringRefreshIsRenewedOnce() async throws {
         let server = FakeGrimmory()
         server.shelve([FakeGrimmory.mobyDick, FakeGrimmory.atomicHabits, FakeGrimmory.projectHailMary])

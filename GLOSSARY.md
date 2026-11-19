@@ -14,7 +14,10 @@ _Avoid_: Title, item, entry
 
 **Book file**:
 One readable or listenable file belonging to a Book: an EPUB, a PDF, or an audiobook (single M4B or a folder of tracks).
-_Avoid_: Format, edition, asset
+_Avoid_: Edition, asset
+
+**Format**:
+The kind of a Book file: EPUB, PDF, or audiobook.
 
 **Track**:
 One audio file within a folder audiobook.

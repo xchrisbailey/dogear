@@ -162,7 +162,7 @@ public struct AudiobookInfo: Decodable, Sendable, Equatable {
         return AudiobookLocation(
             trackIndex: track?.index ?? 0,
             milliseconds: Int(offset / .milliseconds(1)),
-            bookProgress: duration > .zero ? min(1, max(0, time / duration)) : 0
+            throughBook: duration > .zero ? min(1, max(0, time / duration)) : 0
         )
     }
 

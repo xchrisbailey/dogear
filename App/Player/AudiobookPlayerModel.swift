@@ -7,11 +7,9 @@ import UIKit
 /// Streams a Server audiobook, or plays its Download, keeps the listener's Position on the device and shares it with
 /// Grimmory's web player.
 ///
-/// A single-file audiobook is one player item at Track 0; a folder audiobook queues one item per
-/// Track from the playing one onwards, so the next Track is preloaded and starts without a gap.
-/// `currentTime` is always whole-book time; the Position maps it to a Track and the milliseconds
-/// into it. Items carry the access token in their URL, so whenever it changes they're rebuilt and
-/// playback seeks back to the same second.
+/// `AudiobookQueue` decides which items to queue and when to rebuild them (a new access token, a
+/// seek to another Track, a retry); this carries that out with AVFoundation. `currentTime` is
+/// always whole-book time; the Position maps it to a Track and the milliseconds into it.
 @Observable
 final class AudiobookPlayerModel {
     enum State {
@@ -38,7 +36,7 @@ final class AudiobookPlayerModel {
     private let cover: () async -> Data?
 
     private let player = AVQueuePlayer()
-    private var stream: AudiobookStream?
+    private var queue: AudiobookQueue?
     private var streams: Task<Void, Never>?
     /// Reauthorizing once per failure: a failure that survives a fresh token isn't about the token.
     private var hasReauthorized = false
@@ -52,7 +50,7 @@ final class AudiobookPlayerModel {
     /// Set when an interruption (a call, Siri) stopped playback, so its end can resume it.
     private var interruptedWhilePlaying = false
     private var lastTick: ContinuousClock.Instant?
-    private var recording: Task<Void, Never>?
+    private let recorder: PositionRecorder
     private var artwork: MPMediaItemArtwork?
     /// While an item is rebuilt or a seek lands, the player reports times and pauses that aren't
     /// the listener's, which must not be saved as their Position.
@@ -74,6 +72,7 @@ final class AudiobookPlayerModel {
         self.author = author
         self.positions = positions
         self.sharedPositions = sharedPositions
+        recorder = PositionRecorder(bookID: audiobook.bookID, positions: positions, sharedPositions: sharedPositions)
         self.cover = cover
         let saved = UserDefaults.standard.float(forKey: Self.speedKey)
         speed = Self.speeds.contains(saved) ? saved : 1
@@ -96,11 +95,15 @@ final class AudiobookPlayerModel {
         let info: AudiobookInfo
         do {
             info = try await audiobook.info()
+        } catch let error where error == .forbidden || error == .notFound {
+            state = .failed(error.errorDescription ?? "Couldn't load this audiobook.")
+            return
         } catch {
             state = .failed("Couldn't load this audiobook. Check your connection and try again.")
             return
         }
         self.info = info
+        queue = AudiobookQueue(info: info)
         currentTime = await resumeTime(bookFileID: info.bookFileID)
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, policy: .longFormAudio)
@@ -114,7 +117,7 @@ final class AudiobookPlayerModel {
         record(share: false)
         streams = Task { [audiobook] in
             for await stream in await audiobook.streamUpdates() {
-                self.rebuild(with: stream)
+                self.streamChanged(to: stream, hasWorkingItems: self.player.currentItem != nil)
             }
         }
         if let data = await cover(), let image = UIImage(data: data) {
@@ -139,9 +142,9 @@ final class AudiobookPlayerModel {
         try? AVAudioSession.sharedInstance().setActive(true)
         problem = nil
         // After a failure, the listener's retry gets its own fresh-token attempt.
-        if player.currentItem == nil, let stream {
+        if player.currentItem == nil, let plan = queue?.plan(at: currentTime) {
             hasReauthorized = false
-            rebuild(with: stream)
+            load(plan)
         }
         player.play()
     }
@@ -156,12 +159,11 @@ final class AudiobookPlayerModel {
 
     func seek(to time: Duration) {
         let time = max(.zero, min(time, info?.duration ?? time))
-        let trackChanged = info?.track(at: time) != track
+        let leavesTheItem = queue?.leavesTheItem(from: currentTime, to: time) ?? false
         currentTime = time
         if let info { sleepTimer?.moved(to: time, in: info) }
-        // The queue only holds the playing Track onwards, so another Track needs a new queue.
-        if trackChanged, let stream {
-            requeue(with: stream)
+        if leavesTheItem, let plan = queue?.plan(at: time) {
+            load(plan)
         } else {
             reposition()
         }
@@ -200,36 +202,29 @@ final class AudiobookPlayerModel {
         sleepTimer = SleepTimer(mode, at: currentTime, in: info)
     }
 
-    /// A new token (or a retry after a failure): a fresh item at the same second, playing if it was.
-    private func rebuild(with stream: AudiobookStream) {
-        guard stream != self.stream || player.currentItem == nil else { return }
-        requeue(with: stream)
+    /// New URLs: rebuilt at the same second when `AudiobookQueue` says so, playing if it was.
+    private func streamChanged(to stream: AudiobookStream, hasWorkingItems: Bool) {
+        guard let plan = queue?.streamChanged(to: stream, at: currentTime, hasWorkingItems: hasWorkingItems) else { return }
+        load(plan)
     }
 
-    /// Fresh items from the Track at `currentTime` onwards, seeked to it, playing if it was.
-    private func requeue(with stream: AudiobookStream) {
-        guard let info else { return }
+    /// Replaces the player's items with `plan`'s and seeks to its start, playing if it was.
+    private func load(_ plan: AudiobookQueue.Plan) {
         let resume = isPlaying || player.timeControlStatus == .waitingToPlayAtSpecifiedRate
         Self.log.info("Building player items at \(self.currentTime.seconds, format: .fixed(precision: 1)) s")
-        self.stream = stream
-        let queue: [(url: URL, start: Duration)] = if let playing = info.track(at: currentTime) {
-            info.tracks.filter { $0.index >= playing.index }.map { (stream.track($0.index), $0.start) }
-        } else {
-            [(stream.wholeBook, .zero)]
-        }
         repositioning += 1
         player.removeAllItems()
         itemStatus = []
         itemStarts = [:]
-        for (url, start) in queue {
-            let item = AVPlayerItem(url: url)
+        for planned in plan.items {
+            let item = AVPlayerItem(url: planned.url)
             item.audioTimePitchAlgorithm = .timeDomain
-            itemStarts[ObjectIdentifier(item)] = start
+            itemStarts[ObjectIdentifier(item)] = planned.start
             watch(item)
             player.insert(item, after: nil)
         }
         repositioning -= 1
-        reposition()
+        reposition(within: plan.seek)
         if resume { player.play() }
     }
 
@@ -238,10 +233,11 @@ final class AudiobookPlayerModel {
         player.currentItem.flatMap { itemStarts[ObjectIdentifier($0)] } ?? .zero
     }
 
-    /// Seeks to `currentTime` exactly, ignoring the player's reports until it lands.
-    private func reposition() {
+    /// Seeks to `currentTime` exactly, or `offset` into the playing item, ignoring the player's
+    /// reports until it lands.
+    private func reposition(within offset: Duration? = nil) {
         repositioning += 1
-        player.seek(to: CMTime(currentTime - itemStart), toleranceBefore: .zero, toleranceAfter: .zero) { @Sendable [weak self] _ in
+        player.seek(to: CMTime(offset ?? currentTime - itemStart), toleranceBefore: .zero, toleranceAfter: .zero) { @Sendable [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.repositioning -= 1
@@ -277,7 +273,7 @@ final class AudiobookPlayerModel {
     /// A refused token looks like any other failure from the player, so a fresh token is tried
     /// once before the listener is told.
     private func recover() async {
-        guard let stream else { return }
+        guard let stream = queue?.stream else { return }
         guard !hasReauthorized else {
             fail()
             return
@@ -285,8 +281,7 @@ final class AudiobookPlayerModel {
         hasReauthorized = true
         do {
             let fresh = try await audiobook.reauthorize(afterRejecting: stream)
-            self.stream = nil
-            rebuild(with: fresh)
+            streamChanged(to: fresh, hasWorkingItems: false)
         } catch {
             fail()
         }
@@ -393,24 +388,11 @@ final class AudiobookPlayerModel {
     private func record(share: Bool) {
         guard let info else { return }
         let location = Position.Location.audiobook(info.location(at: currentTime))
-        // Chained so a slow save can't land after a newer one and win.
-        recording = Task { [previous = recording, positions, sharedPositions, bookID = audiobook.bookID, bookFileID = info.bookFileID] in
-            await previous?.value
-            guard let positions else {
-                // Without the on-device store there's no Outbox; sharing directly is the best left.
-                if share {
-                    let position = Position(bookFileID: bookFileID, location: location, recordedAt: Date())
-                    try? await sharedPositions?.push(position, bookID: bookID)
-                }
-                return
-            }
-            if share {
-                _ = try? await positions.record(location, bookFileID: bookFileID, bookID: bookID)
-                // Failures stay in the Outbox. A refresh here also hands the player a new token.
-                if let sharedPositions { try? await positions.flushOutbox(to: sharedPositions) }
-            } else {
-                _ = try? await positions.recordLanding(location, bookFileID: bookFileID)
-            }
+        recorder.record(bookFileID: info.bookFileID, share: share) {
+            location
+        } afterSharing: { [positions, sharedPositions] in
+            // Failures stay in the Outbox. A refresh here also hands the player a new token.
+            if let positions, let sharedPositions { try? await positions.flushOutbox(to: sharedPositions) }
         }
     }
 
@@ -436,7 +418,7 @@ final class AudiobookPlayerModel {
         clearRemoteCommands()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        await recording?.value
+        await recorder.finished()
     }
 
     // MARK: Lock screen and Control Center

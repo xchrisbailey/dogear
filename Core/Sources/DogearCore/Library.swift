@@ -20,7 +20,7 @@ public actor Library {
         let client = await client()
         let libraries = try await client.libraries()
         let shelves = try await client.shelves()
-        var books = try await client.books()
+        var books = try await client.books(cached: await cache.books())
         for index in books.indices {
             books[index].shelfIDs = shelves.filter { $0.bookIDs.contains(books[index].id) }.map(\.shelf.id)
         }
@@ -153,6 +153,9 @@ private struct LibraryClient {
         var files: [File]?
         var coverUpdatedOn: String?
         var audiobookCoverUpdatedOn: String?
+        /// A percentage.
+        var readProgress: Double?
+        var lastReadTime: String?
     }
 
     private struct AudiobookInfo: Decodable {
@@ -163,8 +166,11 @@ private struct LibraryClient {
     private static let pageSize = 50
     private static let concurrentDetails = 6
 
-    func books() async throws(RequestError) -> [Book] {
-        try await details(of: try await bookIDs(query: [:]))
+    /// Every Book's detail is fetched on each refresh. The list's summaries can't say which are
+    /// unchanged: they describe only the primary file, and attaching or detaching another Book file
+    /// on the Server changes none of their fields (`addedOn`, `coverUpdatedOn`, `primaryFileId`…).
+    func books(cached: [Book]) async throws(RequestError) -> [Book] {
+        try await details(of: try await bookIDs(query: [:]), cached: cached)
     }
 
     private func bookIDs(query: [String: String]) async throws(RequestError) -> [Int] {
@@ -181,7 +187,9 @@ private struct LibraryClient {
     }
 
     /// The list only names each Book's primary file, so each Book's detail is fetched for its Book files.
-    private func details(of ids: [Int]) async throws(RequestError) -> [Book] {
+    /// One Book's failure doesn't fail the rest: a Book deleted or hidden since the list was
+    /// fetched is left out, and one whose detail can't be read keeps its cached copy.
+    private func details(of ids: [Int], cached: [Book]) async throws(RequestError) -> [Book] {
         let results = await withTaskGroup(of: (Int, Result<Book, RequestError>).self) { group in
             var results: [Int: Result<Book, RequestError>] = [:]
             var pending = ids.enumerated().makeIterator()
@@ -198,7 +206,19 @@ private struct LibraryClient {
             }
             return results
         }
-        return try ids.indices.map { index throws(RequestError) in try results[index]!.get() }
+        let cached = Dictionary(cached.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var books: [Book] = []
+        for (index, id) in ids.enumerated() {
+            switch results[index] {
+            case let .success(book)?: books.append(book)
+            case .failure(.notFound)?, .failure(.forbidden)?: continue
+            case .failure(.serverChanged)?: if let book = cached[id] { books.append(book) }
+            // Offline or signed out: the whole refresh fails and the cache stays as it was.
+            case let .failure(error)?: throw error
+            case nil: continue
+            }
+        }
+        return books
     }
 
     private func book(_ id: Int) async throws(RequestError) -> Book {
@@ -216,7 +236,9 @@ private struct LibraryClient {
             primaryFileID: detail.files?.first { $0.primary == true }?.id,
             ebookCover: detail.coverUpdatedOn.map { Cover(bookID: id, kind: .ebook, updatedOn: $0) },
             audiobookCover: detail.audiobookCoverUpdatedOn.map { Cover(bookID: id, kind: .audiobook, updatedOn: $0) },
-            libraryID: detail.libraryId
+            libraryID: detail.libraryId,
+            serverThroughBook: detail.readProgress.map { $0 / 100 },
+            serverLastRead: detail.lastReadTime.flatMap(SharedPositions.date)
         )
     }
 

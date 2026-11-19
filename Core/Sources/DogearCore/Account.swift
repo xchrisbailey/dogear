@@ -33,6 +33,12 @@ public actor Account {
 
     public func signIn(address: String, username: String, password: String) async throws(SignInError) -> Session {
         let server = try ServerAddress.parse(address)
+        // Signing in again after the sign-in expired. The Outbox, Downloads and cached library
+        // belong to that account, so another one starts only after signing out, which warns
+        // about what would be lost.
+        if let current = session, !ServerAddress.isSame(current.server, server) || current.username != username {
+            throw .differentAccount
+        }
         let client = GrimmoryClient(server: server, urlSession: urlSession)
         try await client.confirmIsGrimmory()
         let tokens = try await client.login(username: username, password: password)
@@ -102,19 +108,35 @@ public actor Account {
         return try await perform(request, accessToken: refreshed.accessToken)
     }
 
-    /// Sends `request` and decodes its JSON answer. Any other answer means the Server has changed shape.
+    /// Sends `request` and decodes its JSON answer. Only an answer Dogear can't decode means the
+    /// Server has changed shape.
     public func fetch<T: Decodable & Sendable>(_ type: T.Type, _ request: URLRequest) async throws(RequestError) -> T {
-        let (status, data) = try await send(request)
-        guard status == 200, let decoded = try? JSONDecoder().decode(type, from: data) else {
-            throw serverChanged()
-        }
+        let data = try await fetchData(request)
+        guard let decoded = try? JSONDecoder().decode(type, from: data) else { throw serverChanged() }
         return decoded
+    }
+
+    /// Sends `request` and returns the body of a successful answer.
+    func fetchData(_ request: URLRequest) async throws(RequestError) -> Data {
+        let (status, data) = try await send(request)
+        try check(status)
+        return data
     }
 
     /// Sends a change, such as a Position, that the Server must accept.
     public func deliver(_ request: URLRequest) async throws(RequestError) {
         let (status, _) = try await send(request)
-        guard (200 ..< 300).contains(status) else { throw serverChanged() }
+        try check(status)
+    }
+
+    /// Refusals and missing Books are answers about this request, not signs the Server changed.
+    private func check(_ status: Int) throws(RequestError) {
+        switch status {
+        case 200 ..< 300: return
+        case 403: throw .forbidden
+        case 404: throw .notFound
+        default: throw serverChanged()
+        }
     }
 
     private func serverChanged() -> RequestError {
@@ -173,8 +195,9 @@ public actor Account {
         }
         guard let response = response as? HTTPURLResponse else { throw .unreachable }
         switch response.statusCode {
-        // A proxy in front of the Server, such as Tailscale Serve, answering while Grimmory is down.
-        case 502, 503, 504: throw .unreachable
+        // Grimmory failing, or a proxy in front of it, such as Tailscale Serve, answering while
+        // it's down: worth trying again later, like no connection.
+        case 500 ..< 600: throw .unreachable
         case 429: throw .rateLimited
         default: break
         }
@@ -253,6 +276,12 @@ public enum RequestError: Error, Equatable {
     case needsSignIn
     case unreachable
     case rateLimited
+    /// The account may not do this, such as download without `canDownload` or see a Book
+    /// outside its libraries.
+    case forbidden
+    /// The Book or Book file is no longer on the Server.
+    case notFound
+    /// The Server answered in a shape Dogear doesn't understand.
     case serverChanged
 }
 
@@ -266,4 +295,6 @@ public enum SignInError: Error, Equatable {
     case rateLimited
     case defaultPassword
     case serverChanged
+    /// Signing in again as another account or to another Server while still signed in.
+    case differentAccount
 }

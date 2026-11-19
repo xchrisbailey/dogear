@@ -19,6 +19,8 @@ extension SignInError: LocalizedError {
             "This account still uses Grimmory's default password. Sign in to Grimmory in a browser, change your password, then come back."
         case .serverChanged:
             "The Server's responses have changed shape. Update Dogear."
+        case .differentAccount:
+            "This device is signed in to a different Server or account. Sign out first, then sign in."
         case .couldNotSaveSession:
             "Signed in, but couldn't save your sign-in on this device. Try again."
         }
@@ -57,6 +59,10 @@ extension RequestError: LocalizedError {
             "Can't reach your Server. Showing your saved library."
         case .rateLimited:
             "Your Server is turning away requests for now. Try again in a few minutes."
+        case .forbidden:
+            "Your Grimmory account isn't allowed to do that. Ask your Server's admin for access."
+        case .notFound:
+            "This Book or Book file is no longer on your Server."
         case .serverChanged:
             "The Server's responses have changed shape. Update Dogear."
         }

@@ -19,4 +19,9 @@ enum ServerAddress {
         default: throw .invalidAddress
         }
     }
+
+    /// Host names ignore case, so the same Server can be typed differently.
+    static func isSame(_ a: URL, _ b: URL) -> Bool {
+        a.host()?.lowercased() == b.host()?.lowercased() && a.port == b.port && a.path() == b.path()
+    }
 }
