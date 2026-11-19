@@ -5,10 +5,12 @@ struct LibraryView: View {
     let library: Library
     /// False while the Server refuses the refresh token; signing in again reloads the list.
     let canSync: Bool
+    /// Chosen in the sidebar.
+    @Binding var scope: BookScope
+    /// Shared with the sidebar, which lists the libraries and shelves.
+    @Binding var navigation: Navigation
 
     @State private var books: [Book] = []
-    @State private var navigation = Navigation()
-    @State private var scope = BookScope.everything
     @State private var search = ""
     @State private var kind = BookKind.all
     @State private var hasLoaded = false
@@ -47,11 +49,6 @@ struct LibraryView: View {
         }
         .navigationTitle(navigation.name(of: scope))
         .searchable(text: $search, prompt: "Title or author")
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                ScopeMenu(navigation: navigation, scope: $scope)
-            }
-        }
         .overlay {
             if hasLoaded, books.isEmpty, problem == nil {
                 emptyState
@@ -120,36 +117,6 @@ struct LibraryView: View {
         var scope: BookScope
         var search: String
         var kind: BookKind
-    }
-}
-
-/// Picks everything, one Grimmory library, or one shelf.
-private struct ScopeMenu: View {
-    let navigation: Navigation
-    @Binding var scope: BookScope
-
-    var body: some View {
-        Menu {
-            Picker("Browse", selection: $scope) {
-                Label("All Books", systemImage: "books.vertical").tag(BookScope.everything)
-            }
-            if !navigation.libraries.isEmpty {
-                Picker("Libraries", selection: $scope) {
-                    ForEach(navigation.libraries) { library in
-                        Label(library.name, systemImage: "building.columns").tag(BookScope.library(library.id))
-                    }
-                }
-            }
-            if !navigation.shelves.isEmpty {
-                Picker("Shelves", selection: $scope) {
-                    ForEach(navigation.shelves) { shelf in
-                        Label(shelf.name, systemImage: "bookmark").tag(BookScope.shelf(shelf.id))
-                    }
-                }
-            }
-        } label: {
-            Label("Browse", systemImage: "line.3.horizontal.decrease.circle")
-        }
     }
 }
 
