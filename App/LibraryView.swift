@@ -7,8 +7,14 @@ struct LibraryView: View {
     let canSync: Bool
 
     @State private var books: [Book] = []
+    @State private var navigation = Navigation()
+    @State private var scope = BookScope.everything
+    @State private var search = ""
+    @State private var kind = BookKind.all
     @State private var hasLoaded = false
     @State private var problem: RequestError?
+
+    private var query: Query { Query(scope: scope, search: search, kind: kind) }
 
     var body: some View {
         List {
@@ -17,27 +23,63 @@ struct LibraryView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
+            Picker("Show", selection: $kind) {
+                ForEach(BookKind.allCases, id: \.self) { kind in
+                    Text(kind.name).tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+            .listRowSeparator(.hidden)
             ForEach(books) { book in
                 BookRow(book: book, library: library)
             }
         }
+        .navigationTitle(navigation.name(of: scope))
+        .searchable(text: $search, prompt: "Title or author")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                ScopeMenu(navigation: navigation, scope: $scope)
+            }
+        }
         .overlay {
             if hasLoaded, books.isEmpty, problem == nil {
-                ContentUnavailableView("No Books yet", systemImage: "books.vertical", description: Text("Books you add in Grimmory show up here."))
+                emptyState
             } else if !hasLoaded, books.isEmpty {
                 ProgressView()
             }
         }
         .refreshable { await refresh() }
         .task(id: canSync) {
-            if !hasLoaded { books = await library.cachedBooks() }
+            if !hasLoaded { await showCached() }
             await refresh()
         }
+        .task(id: query) {
+            guard hasLoaded else { return }
+            await showCached()
+        }
+    }
+
+    @ViewBuilder private var emptyState: some View {
+        if !search.trimmingCharacters(in: .whitespaces).isEmpty {
+            ContentUnavailableView.search(text: search)
+        } else if scope != .everything || kind != .all {
+            ContentUnavailableView("No Books here", systemImage: "books.vertical")
+        } else {
+            ContentUnavailableView("No Books yet", systemImage: "books.vertical", description: Text("Books you add in Grimmory show up here."))
+        }
+    }
+
+    /// Browsing always reads the cache, so it behaves the same offline.
+    private func showCached() async {
+        navigation = await library.navigation()
+        // A library or shelf removed on the Server can't stay selected.
+        if !navigation.contains(scope) { scope = .everything }
+        books = await library.books(in: scope, matching: search, showing: kind)
     }
 
     private func refresh() async {
         do {
-            books = try await library.refresh()
+            _ = try await library.refresh()
             problem = nil
         } catch .needsSignIn, .signedOut {
             // The sign-in banner already explains this; keep showing the cached Books.
@@ -45,7 +87,44 @@ struct LibraryView: View {
         } catch {
             problem = error
         }
+        await showCached()
         hasLoaded = true
+    }
+
+    private struct Query: Hashable {
+        var scope: BookScope
+        var search: String
+        var kind: BookKind
+    }
+}
+
+/// Picks everything, one Grimmory library, or one shelf.
+private struct ScopeMenu: View {
+    let navigation: Navigation
+    @Binding var scope: BookScope
+
+    var body: some View {
+        Menu {
+            Picker("Browse", selection: $scope) {
+                Label("All Books", systemImage: "books.vertical").tag(BookScope.everything)
+            }
+            if !navigation.libraries.isEmpty {
+                Picker("Libraries", selection: $scope) {
+                    ForEach(navigation.libraries) { library in
+                        Label(library.name, systemImage: "building.columns").tag(BookScope.library(library.id))
+                    }
+                }
+            }
+            if !navigation.shelves.isEmpty {
+                Picker("Shelves", selection: $scope) {
+                    ForEach(navigation.shelves) { shelf in
+                        Label(shelf.name, systemImage: "bookmark").tag(BookScope.shelf(shelf.id))
+                    }
+                }
+            }
+        } label: {
+            Label("Browse", systemImage: "line.3.horizontal.decrease.circle")
+        }
     }
 }
 

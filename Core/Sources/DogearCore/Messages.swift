@@ -67,3 +67,24 @@ extension BookFile.Format {
         }
     }
 }
+
+extension BookKind {
+    public var name: String {
+        switch self {
+        case .all: "All"
+        case .ebooks: "Ebooks"
+        case .audiobooks: "Audiobooks"
+        }
+    }
+}
+
+extension Navigation {
+    /// The title for browsing `scope`.
+    public func name(of scope: BookScope) -> String {
+        switch scope {
+        case .everything: "Library"
+        case let .library(id): libraries.first { $0.id == id }?.name ?? "Library"
+        case let .shelf(id): shelves.first { $0.id == id }?.name ?? "Library"
+        }
+    }
+}

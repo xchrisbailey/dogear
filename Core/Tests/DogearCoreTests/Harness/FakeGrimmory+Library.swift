@@ -20,17 +20,27 @@ extension FakeGrimmory {
     static let allSystemsRed = ShelvedBook(detail: "book-detail-azw3")
     static let mobyDick = ShelvedBook(detail: "book-detail-multi-file")
 
+    struct Shelf: Sendable {
+        var id: Int
+        var name: String
+        var bookIDs: [Int]
+    }
+
     func shelve(_ books: [ShelvedBook]) {
         state.withLock { $0.library = books }
+    }
+
+    func setShelves(_ shelves: [Shelf]) {
+        state.withLock { $0.shelves = shelves }
     }
 
     static func library(_ request: Request, state: State) -> FakeServer.Reply? {
         let parts = request.path.split(separator: "/").map(String.init)
         guard request.method == "GET", parts.starts(with: ["api", "v1"]) else { return nil }
         let route = Array(parts.dropFirst(2))
-        guard route.starts(with: ["app", "books"]) || route.first == "media" || route.first == "audiobooks" else {
-            return nil
-        }
+        let isLibraryRoute = route.starts(with: ["app", "books"]) || route == ["app", "shelves"] || route == ["libraries"]
+            || route.first == "media" || route.first == "audiobooks"
+        guard isLibraryRoute else { return nil }
         guard isAuthorized(request, state: state) else {
             return fixture("error-401-unauthenticated", status: 401)
         }
@@ -38,8 +48,20 @@ extension FakeGrimmory {
         func book(_ id: String) -> ShelvedBook? { state.library.first { String($0.id) == id } }
 
         switch route {
+        case ["libraries"]:
+            return fixture("libraries-web")
+        case ["app", "shelves"]:
+            let shelves = state.shelves.map { shelf -> [String: Any] in
+                ["id": shelf.id, "name": shelf.name, "icon": "heart", "bookCount": shelf.bookIDs.count, "publicShelf": false]
+            }
+            return .response(status: 200, body: data(shelves))
         case ["app", "books"]:
-            return page(of: state.library, query: request.query)
+            var books = state.library
+            if let shelfID = request.query["shelfId"] {
+                let ids = state.shelves.first { String($0.id) == shelfID }?.bookIDs ?? []
+                books = books.filter { ids.contains($0.id) }
+            }
+            return page(of: books, query: request.query)
         case let r where r.count == 3 && r.starts(with: ["app", "books"]):
             guard let book = book(r[2]) else { return fixture("error-404-book", status: 404) }
             return .response(status: 200, body: data(book.detailJSON))

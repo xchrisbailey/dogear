@@ -9,10 +9,14 @@ public struct Book: Codable, Sendable, Equatable, Identifiable {
     public var primaryFileID: Int?
     public var ebookCover: Cover?
     public var audiobookCover: Cover?
+    /// The Grimmory library holding the Book.
+    public var libraryID: Int?
+    /// The reader's shelves holding the Book.
+    public var shelfIDs: [Int]
 
     public init(
         id: Int, title: String, authors: [String], files: [BookFile], primaryFileID: Int?,
-        ebookCover: Cover?, audiobookCover: Cover?
+        ebookCover: Cover?, audiobookCover: Cover?, libraryID: Int? = nil, shelfIDs: [Int] = []
     ) {
         self.id = id
         self.title = title
@@ -21,6 +25,8 @@ public struct Book: Codable, Sendable, Equatable, Identifiable {
         self.primaryFileID = primaryFileID
         self.ebookCover = ebookCover
         self.audiobookCover = audiobookCover
+        self.libraryID = libraryID
+        self.shelfIDs = shelfIDs
     }
 
     /// Each format once, in Grimmory's file order.
@@ -28,6 +34,11 @@ public struct Book: Codable, Sendable, Equatable, Identifiable {
         files.reduce(into: []) { formats, file in
             if !formats.contains(file.format) { formats.append(file.format) }
         }
+    }
+
+    /// Ignores case and accents, so "bronte" finds "Brontë".
+    func matches(_ word: String) -> Bool {
+        ([title] + authors).contains { $0.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
     }
 
     /// The cover to show in lists: the audiobook cover when the Book is primarily an audiobook.
