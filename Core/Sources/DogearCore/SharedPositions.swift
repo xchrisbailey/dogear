@@ -33,8 +33,7 @@ public struct SharedPositions: Sendable {
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONEncoder().encode(body)
-        let (status, _) = try await account.send(request)
-        guard status == 200 else { throw .serverChanged }
+        try await account.deliver(request)
     }
 
     /// The Book file's Shared position in `format`, or nil if it was never read anywhere.
@@ -44,11 +43,7 @@ public struct SharedPositions: Sendable {
 
     /// Everything the Server holds for the Book, so one fetch serves each of its Book files.
     func progress(bookID: Int) async throws(RequestError) -> Progress {
-        let (status, data) = try await account.send(try await request(bookID: bookID))
-        guard status == 200, let progress = try? JSONDecoder().decode(Progress.self, from: data) else {
-            throw .serverChanged
-        }
-        return progress
+        try await account.fetch(Progress.self, try await request(bookID: bookID))
     }
 
     private func request(bookID: Int) async throws(RequestError) -> URLRequest {

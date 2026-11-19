@@ -3,7 +3,7 @@ import SwiftUI
 
 struct LibraryView: View {
     let library: Library
-    /// False while the Server refuses the refresh token; signing in again reloads the list.
+    /// False while the Server refuses the refresh token or can't be reached; a change reloads the list.
     let canSync: Bool
     /// Chosen in the sidebar.
     @Binding var scope: BookScope
@@ -122,8 +122,8 @@ struct LibraryView: View {
         do {
             _ = try await library.refresh()
             problem = nil
-        } catch .needsSignIn, .signedOut {
-            // The sign-in banner already explains this; keep showing the cached Books.
+        } catch .needsSignIn, .signedOut, .unreachable, .serverChanged {
+            // A banner already explains these; keep showing the cached Books.
             problem = nil
         } catch {
             problem = error

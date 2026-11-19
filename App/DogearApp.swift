@@ -1,4 +1,5 @@
 import DogearCore
+import Network
 import SwiftUI
 
 @main
@@ -24,6 +25,7 @@ final class AppModel {
     private let sharedPositions: SharedPositions
     /// Positions waiting for the Server.
     private(set) var outboxCount = 0
+    private(set) var serverStatus = ServerStatus()
 
     init(account: Account) {
         self.account = account
@@ -55,6 +57,47 @@ final class AppModel {
             self.session = session
             hasRestored = true
             if let session, !session.needsSignIn { await flushOutbox() }
+        }
+    }
+
+    /// Follows whether the Server is reachable and understood. Coming back online flushes the Outbox.
+    func observeServerStatus() async {
+        for await status in await account.serverStatusUpdates() {
+            let cameBack = !serverStatus.isReachable && status.isReachable
+            serverStatus = status
+            if cameBack { await flushOutbox() }
+        }
+    }
+
+    /// While offline, asks the Server again whenever the network changes, such as rejoining the
+    /// tailnet, and every so often in case nothing on the device noticed.
+    func retryWhileOffline() async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                for await _ in Self.networkChanges() { await self.checkServerIfOffline() }
+            }
+            group.addTask {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(30))
+                    await self.checkServerIfOffline()
+                }
+            }
+        }
+    }
+
+    func checkServerIfOffline() async {
+        guard !serverStatus.isReachable else { return }
+        await account.checkServer()
+    }
+
+    nonisolated private static func networkChanges() -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            let monitor = NWPathMonitor()
+            monitor.pathUpdateHandler = { path in
+                if path.status == .satisfied { continuation.yield() }
+            }
+            continuation.onTermination = { _ in monitor.cancel() }
+            monitor.start(queue: DispatchQueue(label: "dogear.network"))
         }
     }
 
@@ -90,9 +133,12 @@ struct RootView: View {
     var body: some View {
         Group {
             if let session = model.session {
-                HomeView(session: session, library: model.library)
+                HomeView(session: session, library: model.library, serverStatus: model.serverStatus)
                     .safeAreaInset(edge: .top, spacing: 0) {
-                        if session.needsSignIn { NeedsSignInBanner(session: session) }
+                        VStack(spacing: 0) {
+                            if session.needsSignIn { NeedsSignInBanner(session: session) }
+                            ServerStatusBanner(status: model.serverStatus)
+                        }
                     }
             } else if model.hasRestored {
                 SignInView(model: model)
@@ -103,9 +149,16 @@ struct RootView: View {
         .environment(model)
         .task { await model.observeSession() }
         .task { await model.observeOutbox() }
+        .task { await model.observeServerStatus() }
+        .task { await model.retryWhileOffline() }
         // Coming back to the app is the likeliest moment the Server is reachable again.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.flushOutbox() } }
+            if phase == .active {
+                Task {
+                    await model.checkServerIfOffline()
+                    await model.flushOutbox()
+                }
+            }
         }
     }
 }
