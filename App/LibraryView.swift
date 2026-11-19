@@ -18,6 +18,7 @@ struct LibraryView: View {
     @State private var reading: OpenBookFile?
     /// A Book with several formats, waiting for the reader to pick one.
     @State private var choosingFormat: Book?
+    @State private var downloadProblem: String?
     @Environment(AppModel.self) private var model
 
     private var query: Query { Query(scope: scope, search: search, kind: kind) }
@@ -45,22 +46,30 @@ struct LibraryView: View {
                 }
             }
             ForEach(books) { book in
-                let files = Self.openable(book)
-                if let file = files.first {
-                    Button {
-                        if files.count > 1 {
-                            choosingFormat = book
-                        } else {
-                            Task { await open(file, of: book) }
+                Group {
+                    let files = Self.openable(book)
+                    if let file = files.first {
+                        Button {
+                            if files.count > 1 {
+                                choosingFormat = book
+                            } else {
+                                Task { await open(file, of: book) }
+                            }
+                        } label: {
+                            BookRow(book: book, library: library)
                         }
-                    } label: {
+                        .foregroundStyle(.primary)
+                    } else {
                         BookRow(book: book, library: library)
                     }
-                    .foregroundStyle(.primary)
-                } else {
-                    BookRow(book: book, library: library)
                 }
+                .contextMenu { DownloadMenu(book: book, problem: $downloadProblem) }
             }
+        }
+        .alert("Couldn't download", isPresented: Binding { downloadProblem != nil } set: { if !$0 { downloadProblem = nil } }) {
+            Button("OK") {}
+        } message: {
+            Text(downloadProblem ?? "")
         }
         .confirmationDialog(
             "Open",
@@ -210,7 +219,10 @@ struct BookRow: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-                BookFileFormats(files: book.files)
+                HStack {
+                    BookFileFormats(files: book.files)
+                    DownloadBadge(book: book)
+                }
             }
         }
         .accessibilityElement(children: .combine)

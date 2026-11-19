@@ -5,7 +5,7 @@ import Foundation
 @preconcurrency import ReadiumStreamer
 import WebKit
 
-/// Opens a Server EPUB in Readium's navigator, keeps the reader's Position on the device and
+/// Opens a Server EPUB, or its Download, in Readium's navigator, keeps the reader's Position on the device and
 /// shares it with Grimmory's web reader.
 @Observable
 final class EPUBReaderModel: EPUBNavigatorDelegate {
@@ -31,6 +31,8 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
 
     private let bookFileID: Int
     private let epub: ServerEPUB
+    /// The Download's file; nil streams the EPUB from the Server.
+    private let downloaded: URL?
     private let positions: Positions?
     private let sharedPositions: SharedPositions?
     private let signer: EPUBRequestSigner
@@ -48,8 +50,9 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     private var pushing: Task<Void, Never>?
     private static let pushDelay = Duration.seconds(3)
 
-    init(epub: ServerEPUB, bookFileID: Int, positions: Positions?, sharedPositions: SharedPositions?) {
+    init(epub: ServerEPUB, downloaded: URL?, bookFileID: Int, positions: Positions?, sharedPositions: SharedPositions?) {
         self.epub = epub
+        self.downloaded = downloaded
         self.bookFileID = bookFileID
         self.positions = positions
         self.sharedPositions = sharedPositions
@@ -84,8 +87,13 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
         }
     }
 
-    /// Reads the EPUB entry by entry from the Server, so no Download (or `canDownload`) is needed.
+    /// Without a Download, reads the EPUB entry by entry from the Server, so `canDownload` isn't needed.
     private func openPublication() async throws -> Publication {
+        if let downloaded {
+            guard let file = FileURL(url: downloaded) else { throw OpenError.invalidAddress }
+            let asset = try await AssetRetriever(httpClient: httpClient).retrieve(url: file, mediaType: .epub).get()
+            return try await publicationOpener(httpClient: httpClient).open(asset: asset, allowUserInteraction: false).get()
+        }
         guard let baseURL = HTTPURL(url: epub.baseURL) else { throw OpenError.invalidAddress }
         return try await openEPUB(in: HTTPContainer(client: httpClient, baseURL: baseURL, entries: []), httpClient: httpClient)
     }
@@ -219,12 +227,15 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
 /// Opens an EPUB from `container` without sniffing: Grimmory doesn't serve the `mimetype` entry.
 func openEPUB(in container: Container, httpClient: HTTPClient) async throws -> Publication {
     let format = Format(specifications: .zip, .epub, mediaType: .epub, fileExtension: "epub")
-    let opener = PublicationOpener(parser: DefaultPublicationParser(
+    return try await publicationOpener(httpClient: httpClient).open(asset: .container(ContainerAsset(container: container, format: format)), allowUserInteraction: false).get()
+}
+
+func publicationOpener(httpClient: HTTPClient) -> PublicationOpener {
+    PublicationOpener(parser: DefaultPublicationParser(
         httpClient: httpClient,
         assetRetriever: AssetRetriever(httpClient: httpClient),
         pdfFactory: DefaultPDFDocumentFactory()
     ))
-    return try await opener.open(asset: .container(ContainerAsset(container: container, format: format)), allowUserInteraction: false).get()
 }
 
 /// The reader's typography, theme and layout, shared by every EPUB on the device.

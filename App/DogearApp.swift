@@ -4,6 +4,7 @@ import SwiftUI
 
 @main
 struct DogearApp: App {
+    @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
     @State private var model = AppModel(account: Account(tokenStore: KeychainTokenStore()))
 
     var body: some Scene {
@@ -23,6 +24,9 @@ final class AppModel {
     /// nil only if the on-device store can't be opened; Books then open at the start.
     let positions: Positions?
     private let sharedPositions: SharedPositions
+    /// nil only if the Downloads folder can't be created; download options are then hidden.
+    let downloads: Downloads?
+    private(set) var downloadList = DownloadList()
     /// Positions waiting for the Server.
     private(set) var outboxCount = 0
     private(set) var serverStatus = ServerStatus()
@@ -34,27 +38,67 @@ final class AppModel {
         library = (try? LibraryStore.onDevice()).map { Library(account: account, store: $0) }
         positions = (try? PositionStore.onDevice()).map { Positions(store: $0) }
         sharedPositions = SharedPositions(account: account)
+        let transport = BackgroundTransport()
+        downloads = try? Downloads.onDevice(account: account, transport: transport)
+        if let downloads { transport.attach(downloads) }
+        // Earlier versions kept every opened PDF here for offline reading, which is a Download
+        // in all but name and ignored `canDownload`.
+        if let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first {
+            try? FileManager.default.removeItem(at: caches.appending(path: "PDFs"))
+        }
     }
 
-    /// A reader for the Book's EPUB, streamed from the Server. nil when signed out.
+    /// Follows the Downloads for the app's lifetime, starting again whatever iOS dropped while
+    /// the app wasn't running.
+    func observeDownloads() async {
+        guard let downloads else { return }
+        await downloads.resumeTransfers()
+        for await list in await downloads.updates() {
+            downloadList = list
+        }
+    }
+
+    /// Shows a failure to start; once started, progress and failures show in `downloadList`.
+    func download(_ file: BookFile, of book: Book) async throws(DownloadError) {
+        guard let downloads else { throw .couldNotSave }
+        try await downloads.download(file, of: book)
+    }
+
+    func removeDownload(of file: BookFile) async {
+        await downloads?.remove(bookFileID: file.id)
+    }
+
+    /// A reader for the Book's EPUB, from its Download or streamed from the Server. nil when signed out.
     func epubReader(for book: Book, file: BookFile) async -> EPUBReaderModel? {
         guard let epub = await ServerEPUB(account: account, bookID: book.id) else { return nil }
+        var downloaded: URL?
+        if case let .epub(url)? = await downloads?.downloaded(file) { downloaded = url }
         return EPUBReaderModel(
-            epub: epub, bookFileID: file.id, positions: positions, sharedPositions: sharedPositions
+            epub: epub, downloaded: downloaded, bookFileID: file.id, positions: positions, sharedPositions: sharedPositions
         )
     }
 
-    /// A reader for the Book's PDF, fetched from the Server. nil when signed out.
+    /// A reader for the Book's PDF, from its Download or fetched from the Server. nil when signed out.
     func pdfReader(for book: Book, file: BookFile) async -> PDFReaderModel? {
         guard let pdf = await ServerPDF(account: account, bookID: book.id) else { return nil }
+        var downloaded: URL?
+        if case let .pdf(url)? = await downloads?.downloaded(file) { downloaded = url }
         return PDFReaderModel(
-            pdf: pdf, bookFileID: file.id, positions: positions, sharedPositions: sharedPositions
+            pdf: pdf, downloaded: downloaded, bookFileID: file.id, positions: positions, sharedPositions: sharedPositions
         )
     }
 
-    /// A player for the Book's audiobook, streamed from the Server. nil when signed out.
+    /// A player for the Book's audiobook, from its Download or streamed from the Server. nil when signed out.
     func audiobookPlayer(for book: Book) async -> AudiobookPlayerModel? {
-        guard let audiobook = await ServerAudiobook(account: account, bookID: book.id) else { return nil }
+        let file = book.files.first { $0.format == .audiobook }
+        let audiobook: any AudiobookSource
+        if let file, case let .audiobook(downloaded)? = await downloads?.downloaded(file) {
+            audiobook = downloaded
+        } else if let streamed = await ServerAudiobook(account: account, bookID: book.id) {
+            audiobook = streamed
+        } else {
+            return nil
+        }
         let cover = book.audiobookCover ?? book.cover
         return AudiobookPlayerModel(
             audiobook: audiobook, title: book.title, author: book.authors.first,
@@ -71,7 +115,10 @@ final class AppModel {
         for await session in await account.sessionUpdates() {
             self.session = session
             hasRestored = true
-            if let session, !session.needsSignIn { await flushOutbox() }
+            if let session, !session.needsSignIn {
+                await flushOutbox()
+                await downloads?.checkPermission()
+            }
         }
     }
 
@@ -155,6 +202,7 @@ final class AppModel {
         await account.signOut()
         await library?.forget()
         await positions?.forget()
+        await downloads?.removeAll()
         continueRows = ContinueRows()
         session = nil
     }
@@ -183,6 +231,7 @@ struct RootView: View {
         .environment(model)
         .task { await model.observeSession() }
         .task { await model.observeOutbox() }
+        .task { await model.observeDownloads() }
         .task { await model.observePositions() }
         .task { await model.observeServerStatus() }
         .task { await model.retryWhileOffline() }

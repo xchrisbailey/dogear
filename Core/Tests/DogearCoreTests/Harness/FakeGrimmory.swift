@@ -47,6 +47,9 @@ final class FakeGrimmory: Sendable {
         var shelves: [Shelf] = []
         /// `app-progress-*` fixture names by Book id.
         var sharedPositions: [Int: String] = [:]
+        /// What `app/users/me` reports; the fixture's reader may download.
+        var canDownload = true
+        var isAdmin = false
         /// Continue Reading and Continue Listening rows by list name.
         var continueRows: [String: [(bookID: Int, lastReadTime: String)]] = [:]
         /// Replies that replace the Server's own for paths starting with a prefix.
@@ -126,7 +129,7 @@ final class FakeGrimmory: Sendable {
                 return Self.fixture("version", replacing: ["v3.5.0": state.version])
             default:
                 // Grimmory answers unknown paths with its web app, not a 404.
-                return Self.progress(recorded, state: state) ?? Self.continueList(recorded, state: state) ?? Self.audiobookStream(recorded, state: state) ?? Self.library(recorded, state: state) ?? Self.epub(recorded, state: state)
+                return Self.progress(recorded, state: state) ?? Self.download(recorded, state: state) ?? Self.continueList(recorded, state: state) ?? Self.audiobookStream(recorded, state: state) ?? Self.library(recorded, state: state) ?? Self.epub(recorded, state: state)
                     ?? Self.content(recorded, state: state) ?? Self.spaPage
             }
         }

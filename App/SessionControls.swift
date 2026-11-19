@@ -44,16 +44,25 @@ struct SignOutButton: View {
     @Environment(AppModel.self) private var model
     @State private var isConfirming = false
 
+    /// Downloads go too: another account or Server numbers its Books differently.
+    private var warning: String {
+        switch (model.outboxCount > 0, !model.downloadList.downloads.isEmpty) {
+        case (true, true): "Some of your reading progress hasn't reached your Server yet. Signing out discards it and removes your Downloads from this device."
+        case (true, false): "Some of your reading progress hasn't reached your Server yet. Signing out discards it."
+        default: "Signing out removes your Downloads from this device."
+        }
+    }
+
     var body: some View {
         Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") {
-            if model.outboxCount > 0 {
+            if model.outboxCount > 0 || !model.downloadList.downloads.isEmpty {
                 isConfirming = true
             } else {
                 Task { await model.signOut() }
             }
         }
         .confirmationDialog(
-            "Some of your reading progress hasn't reached your Server yet. Signing out discards it.",
+            warning,
             isPresented: $isConfirming,
             titleVisibility: .visible
         ) {

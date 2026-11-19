@@ -8,7 +8,9 @@ extension FakeGrimmory {
         guard request.method == "GET", parts.starts(with: ["api", "v1", "audiobooks"]), parts.last == "stream",
               parts.count == 5 || (parts.count == 7 && parts[4] == "track")
         else { return nil }
-        guard let token = request.query["token"], state.issued.contains(where: { $0.access == token }), !state.invalid.contains(token)
+        // Header auth works here too, as for any other endpoint.
+        let headerToken = request.headers["Authorization"].map { String($0.dropFirst("Bearer ".count)) }
+        guard let token = request.query["token"] ?? headerToken, state.issued.contains(where: { $0.access == token }), !state.invalid.contains(token)
         else { return fixture("error-401-unauthenticated", status: 401) }
         guard let book = state.library.first(where: { String($0.id) == parts[3] }) else {
             return fixture("error-404-book", status: 404)
