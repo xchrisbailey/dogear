@@ -1,0 +1,3 @@
+# Position conflicts resolve by when the reading happened, checked by the client
+
+Grimmory overwrites the Shared position on every save and stamps it with server time, ignoring any client time. Because Dogear queues Positions offline, pushing blindly would let an old Outbox entry overwrite newer reading done elsewhere. So before flushing, Dogear fetches the Shared position and discards any Outbox entry recorded earlier than the server's `updatedAt` (a Stale entry), adopting the server's Position locally. Newest wins even when it's behind the furthest point read; there's no "jump ahead" prompt in v1. Device clock drift is an accepted risk.
