@@ -11,6 +11,7 @@ struct AudiobookPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var isShowingChapters = false
+    @State private var isShowingTracks = false
     @State private var scrubbing: Double?
 
     var body: some View {
@@ -23,12 +24,20 @@ struct AudiobookPlayerView: View {
                         Button("Close", systemImage: "xmark") { dismiss() }
                     }
                     ToolbarItem(placement: .primaryAction) {
-                        Button("Chapters", systemImage: "list.bullet") { isShowingChapters = true }
-                            .disabled(model.info?.chapters.isEmpty ?? true)
+                        if model.info?.isFolder == true {
+                            Button("Tracks", systemImage: "list.number") { isShowingTracks = true }
+                                .disabled(model.info?.tracks.isEmpty ?? true)
+                        } else {
+                            Button("Chapters", systemImage: "list.bullet") { isShowingChapters = true }
+                                .disabled(model.info?.chapters.isEmpty ?? true)
+                        }
                     }
                 }
                 .sheet(isPresented: $isShowingChapters) {
                     ChaptersView(model: model)
+                }
+                .sheet(isPresented: $isShowingTracks) {
+                    TracksView(model: model)
                 }
                 .task { await model.open() }
                 .onDisappear { Task { await model.close() } }
@@ -71,7 +80,7 @@ struct AudiobookPlayerView: View {
     private var controls: some View {
         VStack(spacing: 20) {
             VStack(spacing: 4) {
-                Text(model.chapter?.title ?? " ")
+                Text(model.chapter?.title ?? model.track.map(TracksView.title) ?? " ")
                     .font(.headline)
                     .lineLimit(1)
                 Text(model.title)
@@ -228,6 +237,47 @@ private struct ChaptersView: View {
                 .foregroundStyle(.primary)
             }
             .navigationTitle("Chapters")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+private struct TracksView: View {
+    let model: AudiobookPlayerModel
+    @Environment(\.dismiss) private var dismiss
+
+    static func title(_ track: AudiobookInfo.Track) -> String {
+        track.title ?? "Track \(track.index + 1)"
+    }
+
+    var body: some View {
+        NavigationStack {
+            List(model.info?.tracks ?? []) { track in
+                Button {
+                    model.go(to: track)
+                    dismiss()
+                } label: {
+                    HStack {
+                        Text(Self.title(track))
+                        Spacer()
+                        if track == model.track {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .foregroundStyle(.tint)
+                                .accessibilityLabel("Playing")
+                        }
+                        Text(AudiobookPlayerView.format(track.duration.seconds))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+                .foregroundStyle(.primary)
+            }
+            .navigationTitle("Tracks")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
