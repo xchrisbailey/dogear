@@ -27,7 +27,28 @@ public actor Library {
         let navigation = Navigation(libraries: libraries, shelves: shelves.map(\.shelf))
         // A failed save only costs the offline copy; the fresh list is still worth showing.
         try? await cache.replace(books: books, navigation: navigation)
+        try await refreshContinueRows()
         return books
+    }
+
+    /// The most Books each continue row shows.
+    static let continueLimit = 10
+
+    /// Fetches the Server's Continue Reading and Continue Listening rows, which move whenever a
+    /// Position is saved here or elsewhere. On failure the cached rows are left as they were.
+    public func refreshContinueRows() async throws(RequestError) {
+        let client = await client()
+        let rows = ServerContinueRows(
+            reading: try await client.continueRows("continue-reading", limit: Self.continueLimit),
+            listening: try await client.continueRows("continue-listening", limit: Self.continueLimit)
+        )
+        try? await cache.replace(rows)
+    }
+
+    /// Continue Reading and Continue Listening from the cached Books, moved on by `positions`
+    /// recorded on this device, so the rows are current offline and before the Outbox is flushed.
+    public func continueRows(including positions: [Position]) async -> ContinueRows {
+        await cache.continueRows().rows(books: await cache.books(), positions: positions, limit: Self.continueLimit)
     }
 
     /// The Grimmory libraries and shelves from the last successful refresh.
@@ -84,6 +105,19 @@ private struct LibraryClient {
     /// The web endpoint, because the app one answers 500 to readers who aren't admins.
     func libraries() async throws(RequestError) -> [ServerLibrary] {
         try await get([LibrarySummary].self, "libraries").map { ServerLibrary(id: $0.id, name: $0.name) }
+    }
+
+    private struct ContinueSummary: Decodable {
+        var id: Int
+        var lastReadTime: String?
+    }
+
+    /// Ordered by the Server, most recent first.
+    func continueRows(_ list: String, limit: Int) async throws(RequestError) -> [ServerContinueRows.Row] {
+        try await get([ContinueSummary].self, "app/books/\(list)", query: ["limit": "\(limit)"]).compactMap { summary in
+            guard let lastRead = summary.lastReadTime.flatMap(SharedPositions.date) else { return nil }
+            return ServerContinueRows.Row(bookID: summary.id, lastRead: lastRead)
+        }
     }
 
     private struct ShelfSummary: Decodable {

@@ -16,6 +16,8 @@ struct LibraryView: View {
     @State private var hasLoaded = false
     @State private var problem: RequestError?
     @State private var reading: OpenBookFile?
+    /// A Book with several formats, waiting for the reader to pick one.
+    @State private var choosingFormat: Book?
     @Environment(AppModel.self) private var model
 
     private var query: Query { Query(scope: scope, search: search, kind: kind) }
@@ -34,10 +36,23 @@ struct LibraryView: View {
             }
             .pickerStyle(.segmented)
             .listRowSeparator(.hidden)
+            if showsContinueRows {
+                if kind != .audiobooks, !model.continueRows.reading.isEmpty {
+                    continueRow("Continue Reading", model.continueRows.reading)
+                }
+                if kind != .ebooks, !model.continueRows.listening.isEmpty {
+                    continueRow("Continue Listening", model.continueRows.listening)
+                }
+            }
             ForEach(books) { book in
-                if let file = Self.readable(book) {
+                let files = Self.openable(book)
+                if let file = files.first {
                     Button {
-                        Task { await open(file, of: book) }
+                        if files.count > 1 {
+                            choosingFormat = book
+                        } else {
+                            Task { await open(file, of: book) }
+                        }
                     } label: {
                         BookRow(book: book, library: library)
                     }
@@ -45,6 +60,15 @@ struct LibraryView: View {
                 } else {
                     BookRow(book: book, library: library)
                 }
+            }
+        }
+        .confirmationDialog(
+            "Open",
+            isPresented: Binding { choosingFormat != nil } set: { if !$0 { choosingFormat = nil } },
+            presenting: choosingFormat
+        ) { book in
+            ForEach(Self.openable(book)) { file in
+                Button(file.format.name) { Task { await open(file, of: book) } }
             }
         }
         .navigationTitle(navigation.name(of: scope))
@@ -92,12 +116,36 @@ struct LibraryView: View {
         books = await library.books(in: scope, matching: search, showing: kind)
     }
 
-    /// The Book file a tap opens: its EPUB if it has one, since it reflows, otherwise its PDF,
-    /// otherwise its audiobook.
-    private static func readable(_ book: Book) -> BookFile? {
+    /// Only on the whole library, where they're a way back in rather than part of a search.
+    private var showsContinueRows: Bool {
+        scope == .everything && search.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private func continueRow(_ title: String, _ entries: [ContinueEntry]) -> some View {
+        Section(title) {
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: 16) {
+                    ForEach(entries) { entry in
+                        Button {
+                            Task { await open(entry.file, of: entry.book) }
+                        } label: {
+                            ContinueCard(entry: entry, library: library)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollIndicators(.hidden)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        }
+    }
+
+    /// The Book files a tap can open, one per format: EPUB first, since it reflows, then PDF,
+    /// then audiobook. With more than one, the reader picks.
+    private static func openable(_ book: Book) -> [BookFile] {
         let supported = book.files.filter(\.isSupported)
-        return supported.first { $0.format == .epub } ?? supported.first { $0.format == .pdf }
-            ?? supported.first { $0.format == .audiobook }
+        return [BookFile.Format.epub, .pdf, .audiobook].compactMap { format in supported.first { $0.format == format } }
     }
 
     private func open(_ file: BookFile, of book: Book) async {
@@ -134,6 +182,7 @@ struct LibraryView: View {
             problem = error
         }
         await showCached()
+        await model.showContinueRows()
         hasLoaded = true
     }
 
@@ -164,6 +213,33 @@ struct BookRow: View {
                 BookFileFormats(files: book.files)
             }
         }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A Book file in a continue row: its cover, title and how far in the reader is.
+private struct ContinueCard: View {
+    let entry: ContinueEntry
+    let library: Library
+
+    private var cover: Cover? {
+        entry.file.format == .audiobook ? entry.book.audiobookCover ?? entry.book.cover : entry.book.ebookCover ?? entry.book.cover
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            CoverImage(cover: cover, library: library)
+                .frame(width: 96, height: 144)
+            Text(entry.book.title)
+                .font(.caption)
+                .lineLimit(2)
+            if let progress = entry.position?.location.bookProgress {
+                Text(progress.formatted(.percent.precision(.fractionLength(0))))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 96, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 }

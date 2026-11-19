@@ -60,7 +60,7 @@ public struct SharedPositions: Sendable {
     }
 
     // Grimmory sends Instants, with fractional seconds only when they're non-zero.
-    fileprivate static func date(_ text: String) -> Date? {
+    static func date(_ text: String) -> Date? {
         (try? Date(text, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true)))
             ?? (try? Date(text, strategy: .iso8601))
     }
