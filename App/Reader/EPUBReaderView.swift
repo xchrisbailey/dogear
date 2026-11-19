@@ -29,7 +29,7 @@ struct EPUBReaderView: View {
                     }
                 }
                 .sheet(isPresented: $isShowingContents) {
-                    ContentsView(model: model)
+                    ContentsView(tableOfContents: model.tableOfContents) { await model.go(to: $0) }
                 }
                 .sheet(isPresented: $isShowingSettings) {
                     ReadingSettingsView(preferences: $model.preferences)
@@ -98,16 +98,18 @@ private struct ReadingProgress: View {
     }
 }
 
-private struct ContentsView: View {
-    let model: EPUBReaderModel
+/// A Book file's table of contents; choosing an entry jumps there.
+struct ContentsView: View {
+    let tableOfContents: [ReadiumShared.Link]
+    let go: (ReadiumShared.Link) async -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             List {
-                OutlineGroup(model.tableOfContents.map(ContentsEntry.init), children: \.children) { entry in
+                OutlineGroup(tableOfContents.map(ContentsEntry.init), children: \.children) { entry in
                     Button(entry.link.title ?? entry.link.href) {
-                        Task { await model.go(to: entry.link) }
+                        Task { await go(entry.link) }
                         dismiss()
                     }
                     .foregroundStyle(.primary)

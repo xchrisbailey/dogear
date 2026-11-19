@@ -42,6 +42,14 @@ final class AppModel {
         )
     }
 
+    /// A reader for the Book's PDF, fetched from the Server. nil when signed out.
+    func pdfReader(for book: Book, file: BookFile) async -> PDFReaderModel? {
+        guard let pdf = await ServerPDF(account: account, bookID: book.id) else { return nil }
+        return PDFReaderModel(
+            pdf: pdf, bookFileID: file.id, positions: positions, sharedPositions: sharedPositions
+        )
+    }
+
     /// Follows the Session for the app's lifetime, so a refused refresh anywhere shows up here.
     /// Each usable Session flushes the Outbox, which covers launch and signing in again.
     func observeSession() async {

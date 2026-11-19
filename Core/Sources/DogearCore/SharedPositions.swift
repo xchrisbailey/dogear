@@ -21,6 +21,13 @@ public struct SharedPositions: Sendable {
                 progressPercent: location.bookProgress * 100,
                 contentSourceProgressPercent: location.chapterProgress * 100
             ))
+        case let .pdf(location):
+            // The Server parses `positionData` as an integer for PDFs.
+            body = FileProgressUpdate(fileProgress: .init(
+                bookFileId: position.bookFileID,
+                positionData: String(location.page),
+                progressPercent: location.bookProgress * 100
+            ))
         }
         var request = try await request(bookID: bookID)
         request.httpMethod = "PUT"
@@ -55,9 +62,9 @@ public struct SharedPositions: Sendable {
         struct FileProgress: Encodable {
             var bookFileId: Int
             var positionData: String?
-            var positionHref: String
+            var positionHref: String?
             var progressPercent: Double
-            var contentSourceProgressPercent: Double
+            var contentSourceProgressPercent: Double?
         }
 
         var fileProgress: FileProgress
@@ -73,7 +80,14 @@ public struct SharedPositions: Sendable {
             var updatedAt: String?
         }
 
+        struct PDF: Decodable {
+            var page: Int?
+            var percentage: Double?
+            var updatedAt: String?
+        }
+
         var epubProgress: EPUB?
+        var pdfProgress: PDF?
 
         /// Compared by the format's own `updatedAt` rather than the Book's `lastReadTime`, which
         /// also moves when another of the Book's files is read.
@@ -91,6 +105,12 @@ public struct SharedPositions: Sendable {
                     cfi: epub.cfi
                 )
                 return Position(bookFileID: bookFileID, location: .epub(location), recordedAt: recordedAt)
+            case .pdf:
+                guard let pdf = pdfProgress, let page = pdf.page,
+                      let recordedAt = pdf.updatedAt.flatMap(SharedPositions.date)
+                else { return nil }
+                let location = PDFLocation(page: page, bookProgress: (pdf.percentage ?? 0) / 100)
+                return Position(bookFileID: bookFileID, location: .pdf(location), recordedAt: recordedAt)
             }
         }
     }
