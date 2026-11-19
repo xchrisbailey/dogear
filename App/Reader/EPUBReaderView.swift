@@ -185,6 +185,12 @@ private struct ReadingSettingsView: View {
                     Text("Scroll").tag(true)
                 }
                 .pickerStyle(.segmented)
+                Picker("Pages side by side", selection: Binding { PageSpread(preferences) } set: { $0.apply(to: &preferences) }) {
+                    ForEach(PageSpread.allCases, id: \.self) { spread in
+                        Text(spread.name).tag(spread)
+                    }
+                }
+                .disabled(preferences.scroll == true)
             }
             .navigationTitle("Reading Settings")
             .navigationBarTitleDisplayMode(.inline)
