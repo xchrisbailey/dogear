@@ -4,11 +4,19 @@ import SwiftUI
 struct SignInView: View {
     let model: AppModel
 
-    @State private var address = ""
-    @State private var username = ""
+    @Environment(\.dismiss) private var dismiss
+    @State private var address: String
+    @State private var username: String
     @State private var password = ""
     @State private var error: SignInError?
     @State private var isSigningIn = false
+
+    /// Prefilled when signing in again after the Server refused the refresh token.
+    init(model: AppModel, address: String = "", username: String = "") {
+        self.model = model
+        _address = State(initialValue: address)
+        _username = State(initialValue: username)
+    }
 
     private var canSubmit: Bool {
         !isSigningIn && !address.isEmpty && !username.isEmpty && !password.isEmpty
@@ -70,6 +78,7 @@ struct SignInView: View {
         defer { isSigningIn = false }
         do {
             try await model.signIn(address: address, username: username, password: password)
+            dismiss()
         } catch {
             self.error = error
         }
