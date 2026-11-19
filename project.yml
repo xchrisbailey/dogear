@@ -1,0 +1,36 @@
+name: Dogear
+options:
+  bundleIdPrefix: com.xchrisbailey
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    # Simulator-only builds; drop for device builds.
+    CODE_SIGNING_ALLOWED: NO
+packages:
+  DogearCore:
+    path: Core
+targets:
+  Dogear:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: DogearCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Dogear
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # No NSAppTransportSecurity exceptions: HTTPS only (spec #1).
+schemes:
+  Dogear:
+    build:
+      targets: {Dogear: all}
