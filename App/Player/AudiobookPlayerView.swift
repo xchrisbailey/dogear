@@ -10,6 +10,7 @@ struct AudiobookPlayerView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isShowingChapters = false
     @State private var isShowingTracks = false
     @State private var scrubbing: Double?
@@ -41,6 +42,9 @@ struct AudiobookPlayerView: View {
                 }
                 .task { await model.open() }
                 .onDisappear { Task { await model.close() } }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { Task { await model.catchUp() } }
+                }
         }
     }
 

@@ -9,6 +9,7 @@ struct EPUBReaderView: View {
     @State var model: EPUBReaderModel
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isShowingContents = false
     @State private var isShowingSettings = false
 
@@ -37,6 +38,9 @@ struct EPUBReaderView: View {
                 }
                 .task { await model.open() }
                 .onDisappear { Task { await model.close() } }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { Task { await model.catchUp() } }
+                }
         }
     }
 
@@ -48,6 +52,8 @@ struct EPUBReaderView: View {
             ContentUnavailableView("Can't open this Book", systemImage: "exclamationmark.triangle", description: Text(message))
         case let .reading(navigator):
             NavigatorView(navigator: navigator)
+                // Rotation, spreads and the controls resize the page, and Readium reports where it lands.
+                .onGeometryChange(for: CGSize.self, of: \.size) { _ in model.relocated() }
                 .ignoresSafeArea(edges: .bottom)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     ReadingPosition(model: model)

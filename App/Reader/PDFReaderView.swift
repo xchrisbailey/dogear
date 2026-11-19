@@ -8,6 +8,7 @@ struct PDFReaderView: View {
     @State var model: PDFReaderModel
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isShowingContents = false
 
     var body: some View {
@@ -30,6 +31,9 @@ struct PDFReaderView: View {
                 }
                 .task { await model.open() }
                 .onDisappear { Task { await model.close() } }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { Task { await model.catchUp() } }
+                }
         }
     }
 

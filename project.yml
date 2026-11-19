@@ -9,8 +9,10 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
-    # Simulator-only builds; drop for device builds.
-    CODE_SIGNING_ALLOWED: NO
+    # The Keychain refuses apps signed without entitlements, so simulator builds are signed
+    # ad hoc (per target below, where XcodeGen's preset would override it) and need no team.
+    # Device builds sign automatically with the team passed as DEVELOPMENT_TEAM or picked in Xcode.
+    CODE_SIGN_STYLE: Automatic
 packages:
   Readium:
     url: https://github.com/readium/swift-toolkit
@@ -43,6 +45,8 @@ targets:
         # Merged with the generated keys; holds what has no INFOPLIST_KEY_ setting, like the
         # audio background mode that keeps audiobooks playing on the lock screen.
         INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/Dogear.entitlements
+        "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": "-"
         # No NSAppTransportSecurity exceptions: HTTPS only (spec #1).
   DogearTests:
     type: bundle.unit-test
@@ -61,6 +65,7 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+        "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": "-"
 schemes:
   Dogear:
     build:

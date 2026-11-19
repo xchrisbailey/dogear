@@ -158,6 +158,25 @@ final class AudiobookPlayerModel {
     }
 
     func seek(to time: Duration) {
+        move(to: time)
+        record(share: true)
+    }
+
+    /// Back in the app: if the listener listened on elsewhere meanwhile, moves there rather than
+    /// keeping an older time that the next save would share over it (ADR 0002). While playing,
+    /// this device is where they're listening.
+    func catchUp() async {
+        guard case .ready = state, !isPlaying, let info, let positions, let sharedPositions,
+              let newer = try? await positions.catchUp(.audiobook, bookID: audiobook.bookID, bookFileID: info.bookFileID, from: sharedPositions),
+              case let .audiobook(location) = newer.location,
+              // Playback started while the Server was asked.
+              !isPlaying
+        else { return }
+        // Already the latest Position, so not recorded again.
+        move(to: info.time(of: location))
+    }
+
+    private func move(to time: Duration) {
         let time = max(.zero, min(time, info?.duration ?? time))
         let leavesTheItem = queue?.leavesTheItem(from: currentTime, to: time) ?? false
         currentTime = time
@@ -168,7 +187,6 @@ final class AudiobookPlayerModel {
             reposition()
         }
         updateNowPlaying()
-        record(share: true)
     }
 
     func go(to chapter: AudiobookInfo.Chapter) {
