@@ -31,7 +31,9 @@ final class AppModel {
     /// A reader for the Book's EPUB, streamed from the Server. nil when signed out.
     func epubReader(for book: Book, file: BookFile) async -> EPUBReaderModel? {
         guard let epub = await ServerEPUB(account: account, bookID: book.id) else { return nil }
-        return EPUBReaderModel(epub: epub, bookFileID: file.id, positions: positions)
+        return EPUBReaderModel(
+            epub: epub, bookFileID: file.id, positions: positions, sharedPositions: SharedPositions(account: account)
+        )
     }
 
     /// Follows the Session for the app's lifetime, so a refused refresh anywhere shows up here.

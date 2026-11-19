@@ -4,6 +4,7 @@
 
 - `Core/`: UI-free Swift package (`DogearCore`). Seam 1 tests run against a fake Grimmory Server (`Core/Tests/DogearCoreTests/Harness/`) with fixtures from real v3.5.0 responses: `swift test --package-path Core`.
 - `App/`: SwiftUI app. `Dogear.xcodeproj` is generated from `project.yml` and not committed: `"$(readlink -f "$(command -v xcodegen)")" generate`, then `xcodebuild build -project Dogear.xcodeproj -scheme Dogear -destination "id=$UDID" -derivedDataPath .build/DD` on a simulator you created and delete afterwards.
+- `AppTests/`: seam 2, the CFI bridge on a real Readium navigator with a fixture EPUB (`AppTests/Fixtures/LighthouseLedger`, self-written, CC0). Same as the build command with `test` instead of `build`.
 - Packages: `Dogear.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` is the only committed file under the generated project (XcodeGen keeps it). Commit it whenever a package in `project.yml` changes.
 
 ## Agent skills
