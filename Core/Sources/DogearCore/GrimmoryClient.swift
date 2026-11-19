@@ -60,6 +60,8 @@ struct GrimmoryClient {
         // Grimmory answers expired, revoked and not-yet-valid refresh tokens alike.
         case 401: throw .needsSignIn
         case 429: throw .rateLimited
+        // A proxy in front of the Server answering while Grimmory is down.
+        case 502, 503, 504: throw .unreachable
         default: throw .serverChanged
         }
     }

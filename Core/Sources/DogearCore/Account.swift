@@ -7,6 +7,15 @@ public actor Account {
     private let clock: any WallClock
     private var refreshing: Task<Result<Session, RequestError>, Never>?
     private var observers: [UUID: AsyncStream<Session?>.Continuation] = [:]
+    private var statusObservers: [UUID: AsyncStream<ServerStatus>.Continuation] = [:]
+
+    /// What the latest requests found, so the app can switch to offline mode or ask for an update.
+    public private(set) var serverStatus = ServerStatus() {
+        didSet {
+            guard serverStatus != oldValue else { return }
+            for observer in statusObservers.values { observer.yield(serverStatus) }
+        }
+    }
 
     public private(set) var session: Session? {
         didSet {
@@ -44,6 +53,7 @@ public actor Account {
             throw .couldNotSaveSession
         }
         self.session = session
+        serverStatus = ServerStatus()
         return session
     }
 
@@ -52,6 +62,7 @@ public actor Account {
         tokenStore.clear()
         refreshing = nil
         session = nil
+        serverStatus = ServerStatus()
     }
 
     /// The current Session, then every change to it (refreshes, needing sign-in, signing out).
@@ -68,6 +79,20 @@ public actor Account {
         observers[id] = nil
     }
 
+    /// The current `serverStatus`, then every change to it.
+    public func serverStatusUpdates() -> AsyncStream<ServerStatus> {
+        let (stream, continuation) = AsyncStream<ServerStatus>.makeStream()
+        let id = UUID()
+        statusObservers[id] = continuation
+        continuation.yield(serverStatus)
+        continuation.onTermination = { _ in Task { await self.removeStatusObserver(id) } }
+        return stream
+    }
+
+    private func removeStatusObserver(_ id: UUID) {
+        statusObservers[id] = nil
+    }
+
     /// Sends `request` with the access token. A 401 refreshes the tokens once and retries.
     public func send(_ request: URLRequest) async throws(RequestError) -> (status: Int, data: Data) {
         let session = try usableSession()
@@ -75,6 +100,36 @@ public actor Account {
         guard response.status == 401 else { return response }
         let refreshed = try await refreshedSession(replacing: session.accessToken)
         return try await perform(request, accessToken: refreshed.accessToken)
+    }
+
+    /// Sends `request` and decodes its JSON answer. Any other answer means the Server has changed shape.
+    public func fetch<T: Decodable & Sendable>(_ type: T.Type, _ request: URLRequest) async throws(RequestError) -> T {
+        let (status, data) = try await send(request)
+        guard status == 200, let decoded = try? JSONDecoder().decode(type, from: data) else {
+            throw serverChanged()
+        }
+        return decoded
+    }
+
+    /// Sends a change, such as a Position, that the Server must accept.
+    public func deliver(_ request: URLRequest) async throws(RequestError) {
+        let (status, _) = try await send(request)
+        guard (200 ..< 300).contains(status) else { throw serverChanged() }
+    }
+
+    private func serverChanged() -> RequestError {
+        serverStatus.hasChanged = true
+        return .serverChanged
+    }
+
+    /// Asks the Server's public healthcheck whether it can be reached again, for retrying after
+    /// working offline. Signed out, there's no Server to ask.
+    @discardableResult
+    public func checkServer() async -> ServerStatus {
+        guard let server = session?.server else { return serverStatus }
+        let request = URLRequest(url: server.appending(path: "api/v1/healthcheck"))
+        _ = try? await perform(request, accessToken: nil)
+        return serverStatus
     }
 
     /// The access token to sign a request with, for callers that send requests themselves.
@@ -93,15 +148,42 @@ public actor Account {
         return session
     }
 
-    private func perform(_ request: URLRequest, accessToken: String) async throws(RequestError) -> (status: Int, data: Data) {
-        var request = request
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+    private func perform(_ request: URLRequest, accessToken: String?) async throws(RequestError) -> (status: Int, data: Data) {
         do {
-            let (data, response) = try await urlSession.data(for: request)
-            return ((response as? HTTPURLResponse)?.statusCode ?? 0, data)
+            let response = try await performUnobserved(request, accessToken: accessToken)
+            serverStatus.isReachable = true
+            return response
+        } catch .unreachable {
+            serverStatus.isReachable = false
+            throw .unreachable
+        } catch .serverChanged {
+            serverStatus.isReachable = true
+            throw serverChanged()
+        }
+    }
+
+    private func performUnobserved(_ request: URLRequest, accessToken: String?) async throws(RequestError) -> (status: Int, data: Data) {
+        var request = request
+        if let accessToken { request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization") }
+        let data: Data, response: URLResponse
+        do {
+            (data, response) = try await urlSession.data(for: request)
         } catch {
             throw .unreachable
         }
+        guard let response = response as? HTTPURLResponse else { throw .unreachable }
+        switch response.statusCode {
+        // A proxy in front of the Server, such as Tailscale Serve, answering while Grimmory is down.
+        case 502, 503, 504: throw .unreachable
+        case 429: throw .rateLimited
+        default: break
+        }
+        // Grimmory answers paths it doesn't know with its web app, status 200. No API call
+        // returns HTML, so the call has moved or gone.
+        if response.value(forHTTPHeaderField: "Content-Type")?.lowercased().hasPrefix("text/html") == true {
+            throw .serverChanged
+        }
+        return (response.statusCode, data)
     }
 
     /// Single-flight: rotation revokes the refresh token, so a second concurrent refresh
@@ -137,6 +219,8 @@ public actor Account {
         case .failure(.needsSignIn):
             updated.needsSignIn = true
         case let .failure(error):
+            if error == .unreachable { serverStatus.isReachable = false }
+            if error == .serverChanged { serverStatus.hasChanged = true }
             // Offline or rate-limited: the refresh token is still good, try again later.
             return .failure(error)
         }
@@ -145,6 +229,20 @@ public actor Account {
         try? tokenStore.save(updated)
         session = updated
         return updated.needsSignIn ? .failure(.needsSignIn) : .success(updated)
+    }
+}
+
+public struct ServerStatus: Sendable, Equatable {
+    /// False after a request couldn't reach the Server, such as off the tailnet; the app then
+    /// works offline until a request gets through.
+    public var isReachable: Bool
+    /// The Server answered in a shape Dogear doesn't understand. Stays set until the next
+    /// sign-in, since one changed endpoint means others may have changed too.
+    public var hasChanged: Bool
+
+    public init(isReachable: Bool = true, hasChanged: Bool = false) {
+        self.isReachable = isReachable
+        self.hasChanged = hasChanged
     }
 }
 
