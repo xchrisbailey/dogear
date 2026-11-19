@@ -56,11 +56,11 @@ struct LibraryView: View {
                                 Task { await open(file, of: book) }
                             }
                         } label: {
-                            BookRow(book: book, library: library)
+                            BookRow(book: book, library: library, throughBook: book.throughBook(including: model.recordedPositions))
                         }
                         .foregroundStyle(.primary)
                     } else {
-                        BookRow(book: book, library: library)
+                        BookRow(book: book, library: library, throughBook: book.throughBook(including: model.recordedPositions))
                     }
                 }
                 .contextMenu { DownloadMenu(book: book, problem: $downloadProblem) }
@@ -205,6 +205,8 @@ struct LibraryView: View {
 struct BookRow: View {
     let book: Book
     let library: Library
+    /// nil when the Book was never read.
+    let throughBook: Double?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -222,6 +224,11 @@ struct BookRow: View {
                 HStack {
                     BookFileFormats(files: book.files)
                     DownloadBadge(book: book)
+                }
+                if let throughBook {
+                    Text(throughBook.formatted(.percent.precision(.fractionLength(0))))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

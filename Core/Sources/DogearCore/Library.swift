@@ -153,6 +153,9 @@ private struct LibraryClient {
         var files: [File]?
         var coverUpdatedOn: String?
         var audiobookCoverUpdatedOn: String?
+        /// A percentage.
+        var readProgress: Double?
+        var lastReadTime: String?
     }
 
     private struct AudiobookInfo: Decodable {
@@ -233,7 +236,9 @@ private struct LibraryClient {
             primaryFileID: detail.files?.first { $0.primary == true }?.id,
             ebookCover: detail.coverUpdatedOn.map { Cover(bookID: id, kind: .ebook, updatedOn: $0) },
             audiobookCover: detail.audiobookCoverUpdatedOn.map { Cover(bookID: id, kind: .audiobook, updatedOn: $0) },
-            libraryID: detail.libraryId
+            libraryID: detail.libraryId,
+            serverThroughBook: detail.readProgress.map { $0 / 100 },
+            serverLastRead: detail.lastReadTime.flatMap(SharedPositions.date)
         )
     }
 
