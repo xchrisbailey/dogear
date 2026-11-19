@@ -77,6 +77,16 @@ public actor Account {
         return try await perform(request, accessToken: refreshed.accessToken)
     }
 
+    /// The access token to sign a request with, for callers that send requests themselves.
+    func accessToken() throws(RequestError) -> String {
+        try usableSession().accessToken
+    }
+
+    /// The access token to retry with after the Server rejected `staleAccessToken`.
+    func accessToken(replacing staleAccessToken: String) async throws(RequestError) -> String {
+        try await refreshedSession(replacing: staleAccessToken).accessToken
+    }
+
     private func usableSession() throws(RequestError) -> Session {
         guard let session else { throw .signedOut }
         if session.needsSignIn { throw .needsSignIn }
