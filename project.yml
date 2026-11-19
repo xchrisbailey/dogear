@@ -12,6 +12,9 @@ settings:
     # Simulator-only builds; drop for device builds.
     CODE_SIGNING_ALLOWED: NO
 packages:
+  Readium:
+    url: https://github.com/readium/swift-toolkit
+    exactVersion: 3.11.1
   DogearCore:
     path: Core
 targets:
@@ -21,6 +24,9 @@ targets:
     sources: [App]
     dependencies:
       - package: DogearCore
+      - {package: Readium, product: ReadiumShared}
+      - {package: Readium, product: ReadiumStreamer}
+      - {package: Readium, product: ReadiumNavigator}
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

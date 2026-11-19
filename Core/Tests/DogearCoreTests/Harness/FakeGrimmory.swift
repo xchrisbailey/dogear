@@ -106,7 +106,7 @@ final class FakeGrimmory: Sendable {
                 return Self.fixture("version", replacing: ["v3.5.0": state.version])
             default:
                 // Grimmory answers unknown paths with its web app, not a 404.
-                return Self.library(recorded, state: state) ?? Self.spaPage
+                return Self.library(recorded, state: state) ?? Self.epub(recorded, state: state) ?? Self.spaPage
             }
         }
     }

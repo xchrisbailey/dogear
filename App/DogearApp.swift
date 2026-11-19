@@ -19,10 +19,19 @@ final class AppModel {
     private(set) var hasRestored = false
     /// nil only if the on-device store can't be opened; the library then can't be shown.
     let library: Library?
+    /// nil only if the on-device store can't be opened; Books then open at the start.
+    let positions: Positions?
 
     init(account: Account) {
         self.account = account
         library = (try? LibraryStore.onDevice()).map { Library(account: account, store: $0) }
+        positions = (try? PositionStore.onDevice()).map { Positions(store: $0) }
+    }
+
+    /// A reader for the Book's EPUB, streamed from the Server. nil when signed out.
+    func epubReader(for book: Book, file: BookFile) async -> EPUBReaderModel? {
+        guard let epub = await ServerEPUB(account: account, bookID: book.id) else { return nil }
+        return EPUBReaderModel(epub: epub, bookFileID: file.id, positions: positions)
     }
 
     /// Follows the Session for the app's lifetime, so a refused refresh anywhere shows up here.
@@ -45,6 +54,7 @@ final class AppModel {
     func signOut() async {
         await account.signOut()
         await library?.forget()
+        await positions?.forget()
         session = nil
     }
 }

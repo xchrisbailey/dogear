@@ -13,6 +13,8 @@ struct LibraryView: View {
     @State private var kind = BookKind.all
     @State private var hasLoaded = false
     @State private var problem: RequestError?
+    @State private var reading: OpenBookFile?
+    @Environment(AppModel.self) private var model
 
     private var query: Query { Query(scope: scope, search: search, kind: kind) }
 
@@ -31,7 +33,16 @@ struct LibraryView: View {
             .pickerStyle(.segmented)
             .listRowSeparator(.hidden)
             ForEach(books) { book in
-                BookRow(book: book, library: library)
+                if let epub = book.files.first(where: { $0.format == .epub && $0.isSupported }) {
+                    Button {
+                        Task { await open(epub, of: book) }
+                    } label: {
+                        BookRow(book: book, library: library)
+                    }
+                    .foregroundStyle(.primary)
+                } else {
+                    BookRow(book: book, library: library)
+                }
             }
         }
         .navigationTitle(navigation.name(of: scope))
@@ -47,6 +58,9 @@ struct LibraryView: View {
             } else if !hasLoaded, books.isEmpty {
                 ProgressView()
             }
+        }
+        .fullScreenCover(item: $reading) { open in
+            EPUBReaderView(title: open.title, model: open.reader)
         }
         .refreshable { await refresh() }
         .task(id: canSync) {
@@ -75,6 +89,17 @@ struct LibraryView: View {
         // A library or shelf removed on the Server can't stay selected.
         if !navigation.contains(scope) { scope = .everything }
         books = await library.books(in: scope, matching: search, showing: kind)
+    }
+
+    private func open(_ file: BookFile, of book: Book) async {
+        guard let reader = await model.epubReader(for: book, file: file) else { return }
+        reading = OpenBookFile(title: book.title, reader: reader)
+    }
+
+    private struct OpenBookFile: Identifiable {
+        let id = UUID()
+        let title: String
+        let reader: EPUBReaderModel
     }
 
     private func refresh() async {
