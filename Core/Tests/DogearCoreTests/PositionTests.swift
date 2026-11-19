@@ -23,10 +23,10 @@ struct PositionTests {
 
     @Test func latestPositionIsThereAfterRelaunch() async throws {
         let reading = try positions()
-        try await reading.record(chapter3, bookFileID: 4)
+        try await reading.record(chapter3, bookFileID: 4, bookID: 4)
         clock.advance(by: 90)
-        try await reading.record(chapter4, bookFileID: 4)
-        try await reading.record(chapter3, bookFileID: 31)
+        try await reading.record(chapter4, bookFileID: 4, bookID: 4)
+        try await reading.record(chapter3, bookFileID: 31, bookID: 7)
 
         let relaunched = try positions()
 
@@ -40,10 +40,13 @@ struct PositionTests {
 
     @Test func forgettingPositionsLeavesNothingToResume() async throws {
         let reading = try positions()
-        try await reading.record(chapter3, bookFileID: 4)
+        try await reading.record(chapter3, bookFileID: 4, bookID: 4)
 
         await reading.forget()
 
-        #expect(await try positions().latest(bookFileID: 4) == nil)
+        let relaunched = try positions()
+        #expect(await relaunched.latest(bookFileID: 4) == nil)
+        // Signing out discards unsent reading too; the app warns first.
+        #expect(await relaunched.outboxCount() == 0)
     }
 }

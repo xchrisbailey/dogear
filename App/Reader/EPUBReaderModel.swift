@@ -45,6 +45,8 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     /// Until the reader has landed where they left off, locations aren't new reading.
     private var hasLanded = false
     private var landing: Task<Void, Never>?
+    private var pushing: Task<Void, Never>?
+    private static let pushDelay = Duration.seconds(3)
 
     init(epub: ServerEPUB, bookFileID: Int, positions: Positions?, sharedPositions: SharedPositions?) {
         self.epub = epub
@@ -92,7 +94,7 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     /// Offline, only the device's.
     private func resumeLocation(in publication: Publication) async -> Locator? {
         let local = await positions?.latest(bookFileID: bookFileID)
-        let shared = try? await sharedPositions?.latest(bookID: epub.bookID, bookFileID: bookFileID)
+        let shared = try? await sharedPositions?.latest(.epub, bookID: epub.bookID, bookFileID: bookFileID)
         let newest = [local, shared].compactMap(\.self).max { $0.recordedAt < $1.recordedAt }
         guard case let .epub(saved)? = newest?.location else { return nil }
         if let state = saved.readerState, let locator = try? Locator(jsonString: state) {
@@ -157,24 +159,48 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
 
     private func record(_ locator: Locator, share: Bool) {
         // Chained so a slow save can't land after a newer one and win.
-        recording = Task { [previous = recording, bridge, positions, bookFileID] in
-            let epubLocation = EPUBLocation(
+        recording = Task { [previous = recording, bridge, positions, sharedPositions, bookFileID, bookID = epub.bookID] in
+            let location = Position.Location.epub(EPUBLocation(
                 href: locator.href.removingFragment().string,
                 chapterProgress: locator.locations.progression ?? 0,
                 bookProgress: locator.locations.totalProgression ?? 0,
                 cfi: await bridge?.currentPosition(),
                 readerState: try? locator.jsonString()
-            )
+            ))
             await previous?.value
-            let position = (try? await positions?.record(.epub(epubLocation), bookFileID: bookFileID))
-                ?? Position(bookFileID: bookFileID, location: .epub(epubLocation), recordedAt: Date())
-            if share { await self.share(position) }
+            guard let positions else {
+                // Without the on-device store there's no Outbox; sharing directly is the best left.
+                if share {
+                    let position = Position(bookFileID: bookFileID, location: location, recordedAt: Date())
+                    try? await sharedPositions?.push(position, bookID: bookID)
+                }
+                return
+            }
+            if share {
+                _ = try? await positions.record(location, bookFileID: bookFileID, bookID: bookID)
+                self.pushSoon()
+            } else {
+                _ = try? await positions.recordLanding(location, bookFileID: bookFileID)
+            }
         }
     }
 
-    /// Pushes straight to the Server; failures are dropped until the Outbox (#7) takes over.
-    private func share(_ position: Position) async {
-        try? await sharedPositions?.push(position, bookID: epub.bookID)
+    /// Page turns come in bursts; the Outbox is pushed once the reader settles on a page.
+    private func pushSoon() {
+        pushing?.cancel()
+        pushing = Task { [positions, sharedPositions] in
+            try? await Task.sleep(for: Self.pushDelay)
+            guard !Task.isCancelled, let positions, let sharedPositions else { return }
+            try? await positions.flushOutbox(to: sharedPositions)
+        }
+    }
+
+    /// Pushes the last page read now rather than after the delay. Failures stay in the Outbox.
+    func close() async {
+        pushing?.cancel()
+        await recording?.value
+        guard let positions, let sharedPositions else { return }
+        try? await positions.flushOutbox(to: sharedPositions)
     }
 
     func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {

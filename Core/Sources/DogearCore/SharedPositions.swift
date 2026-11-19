@@ -30,24 +30,18 @@ public struct SharedPositions: Sendable {
         guard status == 200 else { throw .serverChanged }
     }
 
-    /// The Book file's EPUB Shared position, or nil if it was never read anywhere.
-    ///
-    /// The Server keeps it per Book and drops in-chapter progress, so `chapterProgress` is 0.
-    public func latest(bookID: Int, bookFileID: Int) async throws(RequestError) -> Position? {
+    /// The Book file's Shared position in `format`, or nil if it was never read anywhere.
+    public func latest(_ format: Position.Format, bookID: Int, bookFileID: Int) async throws(RequestError) -> Position? {
+        try await progress(bookID: bookID).position(format, bookFileID: bookFileID)
+    }
+
+    /// Everything the Server holds for the Book, so one fetch serves each of its Book files.
+    func progress(bookID: Int) async throws(RequestError) -> Progress {
         let (status, data) = try await account.send(try await request(bookID: bookID))
         guard status == 200, let progress = try? JSONDecoder().decode(Progress.self, from: data) else {
             throw .serverChanged
         }
-        guard let epub = progress.epubProgress, let href = epub.href,
-              let recordedAt = epub.updatedAt.flatMap(Self.date)
-        else { return nil }
-        let location = EPUBLocation(
-            href: String(href.prefix { $0 != "#" }),
-            chapterProgress: 0,
-            bookProgress: (epub.percentage ?? 0) / 100,
-            cfi: epub.cfi
-        )
-        return Position(bookFileID: bookFileID, location: .epub(location), recordedAt: recordedAt)
+        return progress
     }
 
     private func request(bookID: Int) async throws(RequestError) -> URLRequest {
@@ -56,7 +50,7 @@ public struct SharedPositions: Sendable {
     }
 
     // Grimmory sends Instants, with fractional seconds only when they're non-zero.
-    private static func date(_ text: String) -> Date? {
+    fileprivate static func date(_ text: String) -> Date? {
         (try? Date(text, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true)))
             ?? (try? Date(text, strategy: .iso8601))
     }
@@ -74,7 +68,9 @@ public struct SharedPositions: Sendable {
         var fileProgress: FileProgress
     }
 
-    private struct Progress: Decodable {
+    /// The Server answers reads with its older per-format objects, each stamped `updatedAt`,
+    /// not the `fileProgress` shape it's written with.
+    struct Progress: Decodable {
         struct EPUB: Decodable {
             var cfi: String?
             var href: String?
@@ -83,5 +79,24 @@ public struct SharedPositions: Sendable {
         }
 
         var epubProgress: EPUB?
+
+        /// Compared by the format's own `updatedAt` rather than the Book's `lastReadTime`, which
+        /// also moves when another of the Book's files is read.
+        func position(_ format: Position.Format, bookFileID: Int) -> Position? {
+            switch format {
+            case .epub:
+                // The Server keeps it per Book and drops in-chapter progress, so `chapterProgress` is 0.
+                guard let epub = epubProgress, let href = epub.href,
+                      let recordedAt = epub.updatedAt.flatMap(SharedPositions.date)
+                else { return nil }
+                let location = EPUBLocation(
+                    href: String(href.prefix { $0 != "#" }),
+                    chapterProgress: 0,
+                    bookProgress: (epub.percentage ?? 0) / 100,
+                    cfi: epub.cfi
+                )
+                return Position(bookFileID: bookFileID, location: .epub(location), recordedAt: recordedAt)
+            }
+        }
     }
 }

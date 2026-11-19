@@ -30,12 +30,10 @@ struct SignOutButton: View {
 
     var body: some View {
         Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") {
-            Task {
-                if await model.outboxCount() > 0 {
-                    isConfirming = true
-                } else {
-                    await model.signOut()
-                }
+            if model.outboxCount > 0 {
+                isConfirming = true
+            } else {
+                Task { await model.signOut() }
             }
         }
         .confirmationDialog(
@@ -46,6 +44,22 @@ struct SignOutButton: View {
             Button("Sign Out Anyway", role: .destructive) {
                 Task { await model.signOut() }
             }
+        }
+    }
+}
+
+/// A quiet note that some reading hasn't reached the Server yet.
+struct OutboxIndicator: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if model.outboxCount > 0 {
+            Image(systemName: "icloud.and.arrow.up")
+                .foregroundStyle(.secondary)
+                .accessibilityLabel(model.outboxCount == 1
+                    ? "1 Position waiting to sync"
+                    : "\(model.outboxCount) Positions waiting to sync")
+                .help("Reading progress waiting to sync")
         }
     }
 }

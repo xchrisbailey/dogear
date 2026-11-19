@@ -4,6 +4,16 @@ import Foundation
 public struct Position: Codable, Sendable, Equatable {
     public enum Location: Codable, Sendable, Equatable {
         case epub(EPUBLocation)
+
+        public var format: Format {
+            switch self {
+            case .epub: .epub
+            }
+        }
+    }
+
+    public enum Format: Sendable {
+        case epub
     }
 
     public var bookFileID: Int
