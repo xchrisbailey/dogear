@@ -120,13 +120,12 @@ public actor Downloads {
     private func audiobookInfo(bookID: Int, server: URL) async throws(DownloadError) -> StoredAudiobookInfo {
         let url = server.appending(path: "api/v1/audiobooks/\(bookID)/info")
             .appending(queryItems: [URLQueryItem(name: "bookType", value: "AUDIOBOOK")])
-        let status: Int, data: Data
+        let data: Data
         do {
-            (status, data) = try await account.send(URLRequest(url: url))
+            data = try await account.fetchData(URLRequest(url: url))
         } catch {
             throw .request(error)
         }
-        guard status == 200 else { throw .request(.serverChanged) }
         guard var info = try? JSONDecoder().decode(StoredAudiobookInfo.self, from: data),
               (try? JSONDecoder().decode(AudiobookInfo.self, from: data)) != nil
         else { throw .request(.serverChanged) }

@@ -62,6 +62,8 @@ final class PDFReaderModel: PDFNavigatorDelegate {
             )
             pageTurns.bind(to: navigator)
             state = .reading(navigator)
+        } catch let error as RequestError where error == .forbidden || error == .notFound {
+            state = .failed(error.errorDescription ?? "Couldn't open this PDF.")
         } catch {
             state = .failed("Couldn't open this PDF. Check your connection and try again.")
         }

@@ -54,6 +54,29 @@ struct ServerChangesTests {
         #expect(RequestError.serverChanged.errorDescription == "The Server's responses have changed shape. Update Dogear.")
     }
 
+    @Test func refusedOrMissingIsNotAChangedServer() async throws {
+        server.shelve([FakeGrimmory.flatland])
+        let account = try await signedIn()
+
+        let gone = try #require(await ServerPDF(account: account, bookID: 999))
+        await #expect(throws: RequestError.notFound) { try await gone.contents() }
+        // A Book outside the reader's assigned libraries.
+        server.answer("GET", "/api/v1/app/books", with: FakeGrimmory.fixture("error-403", status: 403))
+        await #expect(throws: RequestError.forbidden) { try await library(account).refresh() }
+
+        #expect(await account.serverStatus == ServerStatus())
+        #expect(RequestError.notFound.errorDescription == "This Book or Book file is no longer on your Server.")
+    }
+
+    @Test func serverErrorIsOfflineRatherThanAChangedServer() async throws {
+        let account = try await signedIn()
+        server.answer("GET", "/api/v1/libraries", with: .response(status: 500, body: Data(#"{"status":500}"#.utf8)))
+
+        await #expect(throws: RequestError.unreachable) { try await library(account).refresh() }
+
+        #expect(await account.serverStatus == ServerStatus(isReachable: false, hasChanged: false))
+    }
+
     @Test func serverDownBehindItsProxyIsOfflineAndTheOutboxFlushesOnceItsBack() async throws {
         let account = try await signedIn()
         let reading = try positions()

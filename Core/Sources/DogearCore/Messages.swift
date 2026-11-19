@@ -57,6 +57,10 @@ extension RequestError: LocalizedError {
             "Can't reach your Server. Showing your saved library."
         case .rateLimited:
             "Your Server is turning away requests for now. Try again in a few minutes."
+        case .forbidden:
+            "Your Grimmory account isn't allowed to do that. Ask your Server's admin for access."
+        case .notFound:
+            "This Book or Book file is no longer on your Server."
         case .serverChanged:
             "The Server's responses have changed shape. Update Dogear."
         }

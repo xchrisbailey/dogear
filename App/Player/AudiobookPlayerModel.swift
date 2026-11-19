@@ -96,6 +96,9 @@ final class AudiobookPlayerModel {
         let info: AudiobookInfo
         do {
             info = try await audiobook.info()
+        } catch let error where error == .forbidden || error == .notFound {
+            state = .failed(error.errorDescription ?? "Couldn't load this audiobook.")
+            return
         } catch {
             state = .failed("Couldn't load this audiobook. Check your connection and try again.")
             return
