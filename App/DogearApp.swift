@@ -22,13 +22,26 @@ final class AppModel {
         self.account = account
     }
 
-    func restore() async {
-        session = await account.session
-        hasRestored = true
+    /// Follows the Session for the app's lifetime, so a refused refresh anywhere shows up here.
+    func observeSession() async {
+        for await session in await account.sessionUpdates() {
+            self.session = session
+            hasRestored = true
+        }
     }
 
     func signIn(address: String, username: String, password: String) async throws(SignInError) {
         session = try await account.signIn(address: address, username: username, password: password)
+    }
+
+    /// Positions not yet accepted by the Server. Returns 0 until the Outbox exists.
+    func outboxCount() async -> Int {
+        0
+    }
+
+    func signOut() async {
+        await account.signOut()
+        session = nil
     }
 }
 
@@ -39,12 +52,16 @@ struct RootView: View {
         Group {
             if let session = model.session {
                 HomeView(session: session)
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        if session.needsSignIn { NeedsSignInBanner(session: session) }
+                    }
             } else if model.hasRestored {
                 SignInView(model: model)
             } else {
                 ProgressView()
             }
         }
-        .task { await model.restore() }
+        .environment(model)
+        .task { await model.observeSession() }
     }
 }

@@ -41,6 +41,29 @@ struct GrimmoryClient {
         }
     }
 
+    /// Rotates the refresh token: the one sent is revoked on success.
+    func refresh(refreshToken: String) async throws(RequestError) -> LoginTokens {
+        var request = URLRequest(url: url("auth/refresh"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONEncoder().encode(["refreshToken": refreshToken])
+        let status: Int, data: Data
+        do {
+            (status, data) = try await send(request)
+        } catch {
+            throw .unreachable
+        }
+        switch status {
+        case 200:
+            guard let tokens = try? JSONDecoder().decode(LoginTokens.self, from: data) else { throw .serverChanged }
+            return tokens
+        // Grimmory answers expired, revoked and not-yet-valid refresh tokens alike.
+        case 401: throw .needsSignIn
+        case 429: throw .rateLimited
+        default: throw .serverChanged
+        }
+    }
+
     private struct Version: Decodable { var current: String }
 
     /// Best effort: a missing version is reported as a warning, never a failed sign-in.
