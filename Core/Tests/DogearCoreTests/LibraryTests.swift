@@ -86,6 +86,23 @@ struct LibraryTests {
         #expect(await library.cachedBooks().map(\.id) == [14, 5])
     }
 
+    @Test func oneBookFailingDoesNotHoldUpTheRestOfTheLibrary() async throws {
+        let server = FakeGrimmory()
+        server.shelve([FakeGrimmory.mobyDick, FakeGrimmory.atomicHabits, FakeGrimmory.projectHailMary])
+        let library = try await signedInLibrary(on: server)
+        let before = try await library.refresh()
+        // Moby-Dick is deleted between the list and its detail; Atomic Habits' detail comes
+        // back in a shape Dogear can't read.
+        server.answer("GET", "/api/v1/app/books/21", with: FakeGrimmory.fixture("error-404-book", status: 404))
+        server.answer("GET", "/api/v1/app/books/4", with: .response(status: 200, body: Data(#"{"unexpected":true}"#.utf8)))
+
+        let books = try await library.refresh()
+
+        #expect(books.map(\.id) == [4, 5])
+        #expect(books.first == before[1])
+        #expect(await library.cachedBooks().map(\.id) == [4, 5])
+    }
+
     @Test func expiredAccessTokenDuringRefreshIsRenewedOnce() async throws {
         let server = FakeGrimmory()
         server.shelve([FakeGrimmory.mobyDick, FakeGrimmory.atomicHabits, FakeGrimmory.projectHailMary])
