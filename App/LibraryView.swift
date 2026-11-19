@@ -60,6 +60,7 @@ struct LibraryView: View {
             switch open.reader {
             case let .epub(reader): EPUBReaderView(title: open.title, model: reader)
             case let .pdf(reader): PDFReaderView(title: open.title, model: reader)
+            case let .audiobook(player, cover): AudiobookPlayerView(model: player, cover: cover, library: library)
             }
         }
         .refreshable { await refresh() }
@@ -91,16 +92,19 @@ struct LibraryView: View {
         books = await library.books(in: scope, matching: search, showing: kind)
     }
 
-    /// The Book file a tap opens: its EPUB if it has one, since it reflows, otherwise its PDF.
+    /// The Book file a tap opens: its EPUB if it has one, since it reflows, otherwise its PDF,
+    /// otherwise its audiobook.
     private static func readable(_ book: Book) -> BookFile? {
         let supported = book.files.filter(\.isSupported)
         return supported.first { $0.format == .epub } ?? supported.first { $0.format == .pdf }
+            ?? supported.first { $0.format == .audiobook }
     }
 
     private func open(_ file: BookFile, of book: Book) async {
         let reader: OpenBookFile.Reader? = switch file.format {
         case .epub: await model.epubReader(for: book, file: file).map(OpenBookFile.Reader.epub)
         case .pdf: await model.pdfReader(for: book, file: file).map(OpenBookFile.Reader.pdf)
+        case .audiobook: await model.audiobookPlayer(for: book).map { .audiobook($0, cover: book.audiobookCover ?? book.cover) }
         default: nil
         }
         guard let reader else { return }
@@ -111,6 +115,7 @@ struct LibraryView: View {
         enum Reader {
             case epub(EPUBReaderModel)
             case pdf(PDFReaderModel)
+            case audiobook(AudiobookPlayerModel, cover: Cover?)
         }
 
         let id = UUID()

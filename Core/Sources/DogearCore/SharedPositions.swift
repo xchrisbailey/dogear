@@ -28,6 +28,14 @@ public struct SharedPositions: Sendable {
                 positionData: String(location.page),
                 progressPercent: location.bookProgress * 100
             ))
+        case let .audiobook(location):
+            body = FileProgressUpdate(fileProgress: .init(
+                bookFileId: position.bookFileID,
+                positionData: String(location.milliseconds),
+                positionHref: String(location.trackIndex),
+                // Rounded to 0.1 like the web player's saves.
+                progressPercent: (location.bookProgress * 1000).rounded() / 10
+            ))
         }
         var request = try await request(bookID: bookID)
         request.httpMethod = "PUT"
@@ -86,8 +94,16 @@ public struct SharedPositions: Sendable {
             var updatedAt: String?
         }
 
+        struct Audiobook: Decodable {
+            var positionMs: Int?
+            var trackIndex: Int?
+            var percentage: Double?
+            var updatedAt: String?
+        }
+
         var epubProgress: EPUB?
         var pdfProgress: PDF?
+        var audiobookProgress: Audiobook?
 
         /// Compared by the format's own `updatedAt` rather than the Book's `lastReadTime`, which
         /// also moves when another of the Book's files is read.
@@ -111,6 +127,17 @@ public struct SharedPositions: Sendable {
                 else { return nil }
                 let location = PDFLocation(page: page, bookProgress: (pdf.percentage ?? 0) / 100)
                 return Position(bookFileID: bookFileID, location: .pdf(location), recordedAt: recordedAt)
+            case .audiobook:
+                guard let audiobook = audiobookProgress, let milliseconds = audiobook.positionMs,
+                      let recordedAt = audiobook.updatedAt.flatMap(SharedPositions.date)
+                else { return nil }
+                let location = AudiobookLocation(
+                    // The web player only saves a Track for folder audiobooks.
+                    trackIndex: audiobook.trackIndex ?? 0,
+                    milliseconds: milliseconds,
+                    bookProgress: (audiobook.percentage ?? 0) / 100
+                )
+                return Position(bookFileID: bookFileID, location: .audiobook(location), recordedAt: recordedAt)
             }
         }
     }
