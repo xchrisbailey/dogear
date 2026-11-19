@@ -71,6 +71,12 @@ public struct LibraryStore: Sendable {
         try modelContext.save()
     }
 
+    func clear() throws {
+        try modelContext.delete(model: CachedBook.self)
+        try modelContext.delete(model: CachedCover.self)
+        try modelContext.save()
+    }
+
     private static func key(_ cover: Cover) -> String {
         "\(cover.bookID)/\(cover.kind.rawValue)/\(cover.updatedOn)"
     }

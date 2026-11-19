@@ -31,6 +31,11 @@ public actor Library {
         return image
     }
 
+    /// Drops the cached Books and covers, so the next account or Server starts clean.
+    public func forget() async {
+        try? await cache.clear()
+    }
+
     private func client() async -> LibraryClient {
         LibraryClient(account: account, server: await account.session?.server)
     }

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct HomeView: View {
     let session: Session
+    let library: Library?
 
     var body: some View {
         NavigationStack {
@@ -14,11 +15,15 @@ struct HomeView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(.yellow.opacity(0.2))
                 }
-                ContentUnavailableView(
-                    "Your library",
-                    systemImage: "books.vertical",
-                    description: Text("Signed in as \(session.username) on \(session.server.host() ?? "your Server").")
-                )
+                if let library {
+                    LibraryView(library: library, canSync: !session.needsSignIn)
+                } else {
+                    ContentUnavailableView(
+                        "Library unavailable",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text("Dogear couldn't open its storage on this device.")
+                    )
+                }
             }
             .navigationTitle("Library")
             .toolbar { SignOutButton() }

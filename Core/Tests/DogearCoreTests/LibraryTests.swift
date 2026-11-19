@@ -124,4 +124,18 @@ struct LibraryTests {
 
         #expect(await offline.image(for: cover) == FakeGrimmory.coverBytes(bookID: 4, kind: "thumbnail"))
     }
+
+    @Test func forgettingTheLibraryLeavesNothingOffline() async throws {
+        let server = FakeGrimmory()
+        server.shelve([FakeGrimmory.atomicHabits])
+        let library = try await signedInLibrary(on: server)
+        let cover = try #require(try await library.refresh().first?.cover)
+        _ = await library.image(for: cover)
+
+        await library.forget()
+
+        let offline = try self.library(on: FakeGrimmory(kind: .unreachable))
+        #expect(await offline.cachedBooks().isEmpty)
+        #expect(await offline.image(for: cover) == nil)
+    }
 }
