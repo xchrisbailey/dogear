@@ -1,0 +1,7 @@
+{
+  "canUpload": false,
+  "canDownload": true,
+  "canAccessBookdrop": false,
+  "maxFileUploadSizeMb": 100,
+  "admin": false
+}

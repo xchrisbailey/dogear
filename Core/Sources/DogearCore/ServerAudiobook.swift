@@ -5,7 +5,7 @@ import Foundation
 /// AVPlayer can't add headers, so stream URLs carry the access token as a `token` query parameter
 /// and each player item is stuck with the token it was built with. When the token changes the
 /// player rebuilds its items from the new URLs and seeks back to the same second.
-public struct ServerAudiobook: Sendable {
+public struct ServerAudiobook: AudiobookSource {
     private let account: Account
     private let server: URL
 
@@ -59,22 +59,55 @@ public struct ServerAudiobook: Sendable {
     fileprivate static let bookType = URLQueryItem(name: "bookType", value: "AUDIOBOOK")
 }
 
-/// Stream URLs signed with one access token.
+/// Where a player gets an audiobook from: streamed from the Server, or a Download.
+public protocol AudiobookSource: Sendable {
+    var bookID: Int { get }
+    /// Duration, Chapters and Tracks. `bookFileID` is the Book file Positions are recorded against.
+    func info() async throws(RequestError) -> AudiobookInfo
+    /// The URLs to play now, then new ones whenever the old ones stop working.
+    func streamUpdates() async -> AsyncStream<AudiobookStream>
+    /// New URLs after playing `rejected` failed, or an error when there's nothing to try.
+    func reauthorize(afterRejecting rejected: AudiobookStream) async throws(RequestError) -> AudiobookStream
+}
+
+/// The URLs an audiobook plays from: Server streams signed with one access token, or files on the device.
 public struct AudiobookStream: Sendable, Equatable {
-    fileprivate let base: URL
-    fileprivate let accessToken: String
+    private enum Source: Equatable {
+        case server(base: URL, accessToken: String)
+        case device(wholeBook: URL, tracks: [Int: URL])
+    }
+
+    private let source: Source
+
+    fileprivate init(base: URL, accessToken: String) {
+        source = .server(base: base, accessToken: accessToken)
+    }
+
+    init(wholeBook: URL, tracks: [Int: URL]) {
+        source = .device(wholeBook: wholeBook, tracks: tracks)
+    }
+
+    var accessToken: String {
+        if case let .server(_, accessToken) = source { accessToken } else { "" }
+    }
 
     /// The whole Book file, for single-file audiobooks.
     public var wholeBook: URL {
-        url(base.appending(path: "stream"))
+        switch source {
+        case let .server(base, accessToken): Self.signed(base.appending(path: "stream"), accessToken)
+        case let .device(wholeBook, _): wholeBook
+        }
     }
 
     /// One Track of a folder audiobook.
     public func track(_ index: Int) -> URL {
-        url(base.appending(path: "track/\(index)/stream"))
+        switch source {
+        case let .server(base, accessToken): Self.signed(base.appending(path: "track/\(index)/stream"), accessToken)
+        case let .device(wholeBook, tracks): tracks[index] ?? wholeBook
+        }
     }
 
-    private func url(_ url: URL) -> URL {
+    private static func signed(_ url: URL, _ accessToken: String) -> URL {
         url.appending(queryItems: [ServerAudiobook.bookType, URLQueryItem(name: "token", value: accessToken)])
     }
 }
