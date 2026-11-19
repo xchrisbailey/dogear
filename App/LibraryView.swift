@@ -9,6 +9,8 @@ struct LibraryView: View {
     @State private var books: [Book] = []
     @State private var hasLoaded = false
     @State private var problem: RequestError?
+    @State private var reading: OpenBookFile?
+    @Environment(AppModel.self) private var model
 
     var body: some View {
         List {
@@ -18,7 +20,16 @@ struct LibraryView: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(books) { book in
-                BookRow(book: book, library: library)
+                if let epub = book.files.first(where: { $0.format == .epub && $0.isSupported }) {
+                    Button {
+                        Task { await open(epub, of: book) }
+                    } label: {
+                        BookRow(book: book, library: library)
+                    }
+                    .foregroundStyle(.primary)
+                } else {
+                    BookRow(book: book, library: library)
+                }
             }
         }
         .overlay {
@@ -28,11 +39,25 @@ struct LibraryView: View {
                 ProgressView()
             }
         }
+        .fullScreenCover(item: $reading) { open in
+            EPUBReaderView(title: open.title, model: open.reader)
+        }
         .refreshable { await refresh() }
         .task(id: canSync) {
             if !hasLoaded { books = await library.cachedBooks() }
             await refresh()
         }
+    }
+
+    private func open(_ file: BookFile, of book: Book) async {
+        guard let reader = await model.epubReader(for: book, file: file) else { return }
+        reading = OpenBookFile(title: book.title, reader: reader)
+    }
+
+    private struct OpenBookFile: Identifiable {
+        let id = UUID()
+        let title: String
+        let reader: EPUBReaderModel
     }
 
     private func refresh() async {
