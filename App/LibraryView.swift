@@ -245,8 +245,8 @@ private struct ContinueCard: View {
             Text(entry.book.title)
                 .font(.caption)
                 .lineLimit(2)
-            if let progress = entry.position?.location.bookProgress {
-                Text(progress.formatted(.percent.precision(.fractionLength(0))))
+            if let throughBook = entry.position?.location.throughBook {
+                Text(throughBook.formatted(.percent.precision(.fractionLength(0))))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

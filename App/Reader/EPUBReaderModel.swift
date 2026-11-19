@@ -113,10 +113,10 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
         pendingCFI = saved.cfi
         if let href = AnyURL(string: saved.href), let link = publication.readingOrder.firstWithHREF(href),
            var locator = await publication.locate(link) {
-            locator.locations.progression = saved.chapterProgress
+            locator.locations.progression = saved.throughChapter
             return locator
         }
-        return await publication.locate(progression: saved.bookProgress)
+        return await publication.locate(progression: saved.throughBook)
     }
 
     func go(to link: Link) async {
@@ -170,8 +170,8 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
         recording = Task { [previous = recording, bridge, positions, sharedPositions, bookFileID, bookID = epub.bookID] in
             let location = Position.Location.epub(EPUBLocation(
                 href: locator.href.removingFragment().string,
-                chapterProgress: locator.locations.progression ?? 0,
-                bookProgress: locator.locations.totalProgression ?? 0,
+                throughChapter: locator.locations.progression ?? 0,
+                throughBook: locator.locations.totalProgression ?? 0,
                 cfi: await bridge?.currentPosition(),
                 readerState: try? locator.jsonString()
             ))

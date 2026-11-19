@@ -19,8 +19,8 @@ struct SharedPositionTests {
             bookFileID: 4,
             location: .epub(EPUBLocation(
                 href: "OEBPS/xhtml/15_7_The_Secret_to_Self-.xhtml",
-                chapterProgress: 0.5,
-                bookProgress: 0.25,
+                throughChapter: 0.5,
+                throughBook: 0.25,
                 cfi: "epubcfi(/6/30!/4[x9780735211308_EPUB-13]/2/8/3:190)",
                 readerState: #"{"href":"OEBPS/xhtml/15_7_The_Secret_to_Self-.xhtml"}"#
             )),
@@ -55,8 +55,8 @@ struct SharedPositionTests {
         #expect(location.cfi == "epubcfi(/6/30!/4[x9780735211308_EPUB-13],/2/34,/6/10/3:74)")
         // The web reader's href points at a page-list anchor; the resource is what matters.
         #expect(location.href == "OEBPS/xhtml/15_7_The_Secret_to_Self-.xhtml")
-        #expect(location.bookProgress == 0.281341)
-        #expect(location.chapterProgress == 0)
+        #expect(location.throughBook == 0.281341)
+        #expect(location.throughChapter == 0)
         #expect(location.readerState == nil)
     }
 

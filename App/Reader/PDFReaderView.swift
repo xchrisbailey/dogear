@@ -43,7 +43,7 @@ struct PDFReaderView: View {
             PDFNavigatorView(navigator: navigator)
                 .ignoresSafeArea(edges: .bottom)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    PageProgress(page: model.page, pageCount: model.pageCount)
+                    PagePosition(page: model.page, pageCount: model.pageCount)
                 }
         }
     }
@@ -55,8 +55,8 @@ private struct PDFNavigatorView: UIViewControllerRepresentable {
     func updateUIViewController(_ navigator: PDFNavigatorViewController, context: Context) {}
 }
 
-/// The page and progress through the whole Book file.
-private struct PageProgress: View {
+/// The page and how far through the whole Book file it is.
+private struct PagePosition: View {
     let page: Int?
     let pageCount: Int?
 

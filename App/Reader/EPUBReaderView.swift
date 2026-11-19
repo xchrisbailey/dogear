@@ -50,7 +50,7 @@ struct EPUBReaderView: View {
             NavigatorView(navigator: navigator)
                 .ignoresSafeArea(edges: .bottom)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    ReadingProgress(model: model)
+                    ReadingPosition(model: model)
                 }
                 .safeAreaInset(edge: .top, spacing: 0) {
                     if let problem = model.problem {
@@ -72,8 +72,8 @@ private struct NavigatorView: UIViewControllerRepresentable {
     func updateUIViewController(_ navigator: EPUBNavigatorViewController, context: Context) {}
 }
 
-/// Progress through the Chapter and the whole Book file.
-private struct ReadingProgress: View {
+/// How far through the Chapter and the whole Book file the reader is.
+private struct ReadingPosition: View {
     let model: EPUBReaderModel
 
     var body: some View {

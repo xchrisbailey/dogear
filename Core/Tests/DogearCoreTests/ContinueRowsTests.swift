@@ -64,13 +64,13 @@ struct ContinueRowsTests {
         let offline = try library(on: FakeGrimmory(kind: .unreachable))
         let reading = try positions()
 
-        let pdf = Position.Location.pdf(PDFLocation(page: 12, bookProgress: 0.12))
+        let pdf = Position.Location.pdf(PDFLocation(page: 12, throughBook: 0.12))
         try await reading.record(pdf, bookFileID: 21, bookID: 9)
         clock.advance(by: 60)
-        let audiobook = Position.Location.audiobook(AudiobookLocation(trackIndex: 0, milliseconds: 90_000, bookProgress: 0.02))
+        let audiobook = Position.Location.audiobook(AudiobookLocation(trackIndex: 0, milliseconds: 90_000, throughBook: 0.02))
         try await reading.record(audiobook, bookFileID: 32, bookID: 21)
         // Opened but never read: Grimmory wouldn't list it either.
-        try await reading.recordLanding(.audiobook(AudiobookLocation(trackIndex: 0, milliseconds: 0, bookProgress: 0)), bookFileID: 5)
+        try await reading.recordLanding(.audiobook(AudiobookLocation(trackIndex: 0, milliseconds: 0, throughBook: 0)), bookFileID: 5)
 
         let rows = await offline.continueRows(including: await reading.all())
 
@@ -85,7 +85,7 @@ struct ContinueRowsTests {
         _ = try await library.refresh()
         let reading = try positions()
 
-        let end = Position.Location.epub(EPUBLocation(href: "OEBPS/end.xhtml", chapterProgress: 1, bookProgress: 0.998))
+        let end = Position.Location.epub(EPUBLocation(href: "OEBPS/end.xhtml", throughChapter: 1, throughBook: 0.998))
         try await reading.record(end, bookFileID: 4, bookID: 4)
 
         #expect(await library.continueRows(including: await reading.all()).reading.isEmpty)

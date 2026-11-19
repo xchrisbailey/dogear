@@ -27,7 +27,7 @@ struct FolderAudiobookTests {
         let location = info.location(at: .milliseconds(400_000))
         #expect(location.trackIndex == 1)
         #expect(location.milliseconds == 79_635)
-        #expect(abs(location.bookProgress - 0.018395) < 0.000001)
+        #expect(abs(location.throughBook - 0.018395) < 0.000001)
         #expect(info.location(at: .milliseconds(21_400_000)).trackIndex == 80)
         #expect(info.location(at: .milliseconds(21_400_000)).milliseconds == 99_640)
         // A Track's first millisecond belongs to it, not the one before.
@@ -88,7 +88,7 @@ struct FolderAudiobookTests {
     @Test func positionOnATrackTheServerNoLongerListsResumesAtTheEnd() async throws {
         let info = try await audiobook().info()
 
-        let gone = AudiobookLocation(trackIndex: 999, milliseconds: 5_000, bookProgress: 1)
+        let gone = AudiobookLocation(trackIndex: 999, milliseconds: 5_000, throughBook: 1)
 
         #expect(info.time(of: gone) == .milliseconds(21_744_676))
     }

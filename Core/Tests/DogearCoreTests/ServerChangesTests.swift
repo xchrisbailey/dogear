@@ -24,8 +24,8 @@ struct ServerChangesTests {
         Library(account: account, store: try LibraryStore(url: directory.appending(path: "Library.store")))
     }
 
-    func epub(_ bookProgress: Double) -> Position.Location {
-        .epub(EPUBLocation(href: "OEBPS/ch03.xhtml", chapterProgress: 0.5, bookProgress: bookProgress, cfi: "epubcfi(/6/8!/4/2/1:0)"))
+    func epub(_ throughBook: Double) -> Position.Location {
+        .epub(EPUBLocation(href: "OEBPS/ch03.xhtml", throughChapter: 0.5, throughBook: throughBook, cfi: "epubcfi(/6/8!/4/2/1:0)"))
     }
 
     @Test func pushAnsweredByAWebPageStaysInTheOutbox() async throws {

@@ -117,8 +117,8 @@ final class PDFReaderModel: PDFNavigatorDelegate {
 
     private func record(_ page: Int, share: Bool) {
         // Matches the web reader, which shares page ÷ page count.
-        let bookProgress = pageCount.map { Double(page) / Double(max($0, 1)) } ?? 0
-        let location = Position.Location.pdf(PDFLocation(page: page, bookProgress: bookProgress))
+        let throughBook = pageCount.map { Double(page) / Double(max($0, 1)) } ?? 0
+        let location = Position.Location.pdf(PDFLocation(page: page, throughBook: throughBook))
         // Chained so a slow save can't land after a newer one and win.
         recording = Task { [previous = recording, positions, sharedPositions, bookFileID, bookID = pdf.bookID] in
             await previous?.value

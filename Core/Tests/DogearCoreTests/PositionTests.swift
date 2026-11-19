@@ -15,10 +15,10 @@ struct PositionTests {
     }
 
     let chapter3 = Position.Location.epub(EPUBLocation(
-        href: "OEBPS/ch03.xhtml", chapterProgress: 0.4, bookProgress: 0.21, readerState: #"{"href":"OEBPS/ch03.xhtml"}"#
+        href: "OEBPS/ch03.xhtml", throughChapter: 0.4, throughBook: 0.21, readerState: #"{"href":"OEBPS/ch03.xhtml"}"#
     ))
     let chapter4 = Position.Location.epub(EPUBLocation(
-        href: "OEBPS/ch04.xhtml", chapterProgress: 0.1, bookProgress: 0.27, readerState: #"{"href":"OEBPS/ch04.xhtml"}"#
+        href: "OEBPS/ch04.xhtml", throughChapter: 0.1, throughBook: 0.27, readerState: #"{"href":"OEBPS/ch04.xhtml"}"#
     ))
 
     @Test func latestPositionIsThereAfterRelaunch() async throws {
