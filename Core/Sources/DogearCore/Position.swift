@@ -4,11 +4,13 @@ import Foundation
 public struct Position: Codable, Sendable, Equatable {
     public enum Location: Codable, Sendable, Equatable {
         case epub(EPUBLocation)
+        case pdf(PDFLocation)
         case audiobook(AudiobookLocation)
 
         public var format: Format {
             switch self {
             case .epub: .epub
+            case .pdf: .pdf
             case .audiobook: .audiobook
             }
         }
@@ -16,6 +18,7 @@ public struct Position: Codable, Sendable, Equatable {
 
     public enum Format: Sendable {
         case epub
+        case pdf
         case audiobook
     }
 
@@ -50,6 +53,19 @@ public struct EPUBLocation: Codable, Sendable, Equatable {
         self.bookProgress = bookProgress
         self.cfi = cfi
         self.readerState = readerState
+    }
+}
+
+/// A page in a PDF, in the shape Grimmory's web reader shares.
+public struct PDFLocation: Codable, Sendable, Equatable {
+    /// 1-based, as the web reader counts.
+    public var page: Int
+    /// 0…1 through the whole Book file; the web reader uses page ÷ page count.
+    public var bookProgress: Double
+
+    public init(page: Int, bookProgress: Double) {
+        self.page = page
+        self.bookProgress = bookProgress
     }
 }
 

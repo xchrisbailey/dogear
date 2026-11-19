@@ -23,11 +23,7 @@ public struct ServerAudiobook: Sendable {
     public func info() async throws(RequestError) -> AudiobookInfo {
         var url = server.appending(path: "api/v1/audiobooks/\(bookID)/info")
         url.append(queryItems: [Self.bookType])
-        let (status, data) = try await account.send(URLRequest(url: url))
-        guard status == 200, let info = try? JSONDecoder().decode(AudiobookInfo.self, from: data) else {
-            throw .serverChanged
-        }
-        return info
+        return try await account.fetch(AudiobookInfo.self, URLRequest(url: url))
     }
 
     /// The stream URLs now, then new ones each time the access token changes (a refresh, or

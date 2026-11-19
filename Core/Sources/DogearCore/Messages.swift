@@ -36,6 +36,16 @@ extension VersionWarning {
     }
 }
 
+extension ServerStatus {
+    /// What to tell the reader, or nil when all is well. A changed Server matters more: going
+    /// back online won't fix it.
+    public var message: String? {
+        if hasChanged { return RequestError.serverChanged.errorDescription }
+        if !isReachable { return "Offline: can't reach your Server. Your saved library, Downloads and reading progress still work, and progress syncs once it's back." }
+        return nil
+    }
+}
+
 extension RequestError: LocalizedError {
     public var errorDescription: String? {
         switch self {

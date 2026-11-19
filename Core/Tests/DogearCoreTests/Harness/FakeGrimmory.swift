@@ -47,6 +47,8 @@ final class FakeGrimmory: Sendable {
         var shelves: [Shelf] = []
         /// `app-progress-*` fixture names by Book id.
         var sharedPositions: [Int: String] = [:]
+        /// Replies that replace the Server's own for paths starting with a prefix.
+        var overrides: [(method: String, pathPrefix: String, reply: FakeServer.Reply)] = []
     }
 
     let state: Mutex<State>
@@ -77,6 +79,17 @@ final class FakeGrimmory: Sendable {
         state.withLock { $0.kind = kind }
     }
 
+    /// Answers `method` requests under `pathPrefix` with `reply` instead, as a changed or
+    /// broken Server would.
+    func answer(_ method: String, _ pathPrefix: String, with reply: FakeServer.Reply) {
+        state.withLock { $0.overrides.append((method, pathPrefix, reply)) }
+    }
+
+    /// The Server answers for itself again.
+    func clearAnswers() {
+        state.withLock { $0.overrides = [] }
+    }
+
     private func handle(_ request: URLRequest, body: Data?) -> FakeServer.Reply {
         state.withLock { state in
             let recorded = Request(
@@ -93,6 +106,9 @@ final class FakeGrimmory: Sendable {
             case .notGrimmory: return Self.spaPage
             case .grimmory: break
             }
+            if let override = state.overrides.last(where: { $0.method == recorded.method && recorded.path.hasPrefix($0.pathPrefix) }) {
+                return override.reply
+            }
 
             switch (recorded.method, recorded.path) {
             case ("GET", "/api/v1/healthcheck"):
@@ -108,7 +124,8 @@ final class FakeGrimmory: Sendable {
                 return Self.fixture("version", replacing: ["v3.5.0": state.version])
             default:
                 // Grimmory answers unknown paths with its web app, not a 404.
-                return Self.progress(recorded, state: state) ?? Self.audiobookStream(recorded, state: state) ?? Self.library(recorded, state: state) ?? Self.epub(recorded, state: state) ?? Self.spaPage
+                return Self.progress(recorded, state: state) ?? Self.audiobookStream(recorded, state: state) ?? Self.library(recorded, state: state) ?? Self.epub(recorded, state: state)
+                    ?? Self.content(recorded, state: state) ?? Self.spaPage
             }
         }
     }

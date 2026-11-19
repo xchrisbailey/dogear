@@ -225,18 +225,9 @@ private struct LibraryClient {
         return data
     }
 
-    private func get<T: Decodable>(_ type: T.Type, _ path: String, query: [String: String] = [:]) async throws(RequestError) -> T {
+    private func get<T: Decodable & Sendable>(_ type: T.Type, _ path: String, query: [String: String] = [:]) async throws(RequestError) -> T {
         guard let request = request(path, query: query) else { throw .signedOut }
-        let (status, data) = try await account.send(request)
-        switch status {
-        case 200:
-            do {
-                return try JSONDecoder().decode(type, from: data)
-            } catch {
-                throw .serverChanged
-            }
-        default: throw .serverChanged
-        }
+        return try await account.fetch(type, request)
     }
 
     private func request(_ path: String, query: [String: String]) -> URLRequest? {

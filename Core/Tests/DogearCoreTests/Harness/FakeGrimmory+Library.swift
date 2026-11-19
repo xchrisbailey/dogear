@@ -19,6 +19,7 @@ extension FakeGrimmory {
     static let slaughterhouseFive = ShelvedBook(detail: "book-detail-audiobook-folder", audiobookInfo: "audiobook-info-folder")
     static let allSystemsRed = ShelvedBook(detail: "book-detail-azw3")
     static let mobyDick = ShelvedBook(detail: "book-detail-multi-file")
+    static let flatland = ShelvedBook(detail: "book-detail-pdf")
 
     struct Shelf: Sendable {
         var id: Int

@@ -8,6 +8,7 @@ import SwiftUI
 struct HomeView: View {
     let session: Session
     let library: Library?
+    let serverStatus: ServerStatus
 
     @State private var scope: BookScope? = .everything
     @State private var navigation = Navigation()
@@ -29,7 +30,8 @@ struct HomeView: View {
                     if let library {
                         LibraryView(
                             library: library,
-                            canSync: !session.needsSignIn,
+                            // Reaching the Server again reloads the list.
+                            canSync: !session.needsSignIn && serverStatus.isReachable,
                             scope: Binding { scope ?? .everything } set: { scope = $0 },
                             navigation: $navigation
                         )

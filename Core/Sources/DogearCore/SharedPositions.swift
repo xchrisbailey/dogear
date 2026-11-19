@@ -21,22 +21,27 @@ public struct SharedPositions: Sendable {
                 progressPercent: location.bookProgress * 100,
                 contentSourceProgressPercent: location.chapterProgress * 100
             ))
+        case let .pdf(location):
+            // The Server parses `positionData` as an integer for PDFs.
+            body = FileProgressUpdate(fileProgress: .init(
+                bookFileId: position.bookFileID,
+                positionData: String(location.page),
+                progressPercent: location.bookProgress * 100
+            ))
         case let .audiobook(location):
             body = FileProgressUpdate(fileProgress: .init(
                 bookFileId: position.bookFileID,
                 positionData: String(location.milliseconds),
                 positionHref: String(location.trackIndex),
                 // Rounded to 0.1 like the web player's saves.
-                progressPercent: (location.bookProgress * 1000).rounded() / 10,
-                contentSourceProgressPercent: nil
+                progressPercent: (location.bookProgress * 1000).rounded() / 10
             ))
         }
         var request = try await request(bookID: bookID)
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONEncoder().encode(body)
-        let (status, _) = try await account.send(request)
-        guard status == 200 else { throw .serverChanged }
+        try await account.deliver(request)
     }
 
     /// The Book file's Shared position in `format`, or nil if it was never read anywhere.
@@ -46,11 +51,7 @@ public struct SharedPositions: Sendable {
 
     /// Everything the Server holds for the Book, so one fetch serves each of its Book files.
     func progress(bookID: Int) async throws(RequestError) -> Progress {
-        let (status, data) = try await account.send(try await request(bookID: bookID))
-        guard status == 200, let progress = try? JSONDecoder().decode(Progress.self, from: data) else {
-            throw .serverChanged
-        }
-        return progress
+        try await account.fetch(Progress.self, try await request(bookID: bookID))
     }
 
     private func request(bookID: Int) async throws(RequestError) -> URLRequest {
@@ -69,7 +70,7 @@ public struct SharedPositions: Sendable {
         struct FileProgress: Encodable {
             var bookFileId: Int
             var positionData: String?
-            var positionHref: String
+            var positionHref: String?
             var progressPercent: Double
             var contentSourceProgressPercent: Double?
         }
@@ -87,6 +88,12 @@ public struct SharedPositions: Sendable {
             var updatedAt: String?
         }
 
+        struct PDF: Decodable {
+            var page: Int?
+            var percentage: Double?
+            var updatedAt: String?
+        }
+
         struct Audiobook: Decodable {
             var positionMs: Int?
             var trackIndex: Int?
@@ -95,6 +102,7 @@ public struct SharedPositions: Sendable {
         }
 
         var epubProgress: EPUB?
+        var pdfProgress: PDF?
         var audiobookProgress: Audiobook?
 
         /// Compared by the format's own `updatedAt` rather than the Book's `lastReadTime`, which
@@ -113,6 +121,12 @@ public struct SharedPositions: Sendable {
                     cfi: epub.cfi
                 )
                 return Position(bookFileID: bookFileID, location: .epub(location), recordedAt: recordedAt)
+            case .pdf:
+                guard let pdf = pdfProgress, let page = pdf.page,
+                      let recordedAt = pdf.updatedAt.flatMap(SharedPositions.date)
+                else { return nil }
+                let location = PDFLocation(page: page, bookProgress: (pdf.percentage ?? 0) / 100)
+                return Position(bookFileID: bookFileID, location: .pdf(location), recordedAt: recordedAt)
             case .audiobook:
                 guard let audiobook = audiobookProgress, let milliseconds = audiobook.positionMs,
                       let recordedAt = audiobook.updatedAt.flatMap(SharedPositions.date)

@@ -3,7 +3,7 @@ import SwiftUI
 
 struct LibraryView: View {
     let library: Library
-    /// False while the Server refuses the refresh token; signing in again reloads the list.
+    /// False while the Server refuses the refresh token or can't be reached; a change reloads the list.
     let canSync: Bool
     /// Chosen in the sidebar.
     @Binding var scope: BookScope
@@ -35,7 +35,7 @@ struct LibraryView: View {
             .pickerStyle(.segmented)
             .listRowSeparator(.hidden)
             ForEach(books) { book in
-                if let file = Self.openable(book) {
+                if let file = Self.readable(book) {
                     Button {
                         Task { await open(file, of: book) }
                     } label: {
@@ -57,11 +57,10 @@ struct LibraryView: View {
             }
         }
         .fullScreenCover(item: $reading) { open in
-            switch open.content {
-            case let .epub(reader):
-                EPUBReaderView(title: open.title, model: reader)
-            case let .audiobook(player, cover):
-                AudiobookPlayerView(model: player, cover: cover, library: library)
+            switch open.reader {
+            case let .epub(reader): EPUBReaderView(title: open.title, model: reader)
+            case let .pdf(reader): PDFReaderView(title: open.title, model: reader)
+            case let .audiobook(player, cover): AudiobookPlayerView(model: player, cover: cover, library: library)
             }
         }
         .refreshable { await refresh() }
@@ -93,40 +92,43 @@ struct LibraryView: View {
         books = await library.books(in: scope, matching: search, showing: kind)
     }
 
-    /// The Book file a tap opens: the primary one when Dogear can open it, otherwise the first that it can.
-    private static func openable(_ book: Book) -> BookFile? {
-        let files = book.files.filter { $0.isSupported && [.epub, .audiobook].contains($0.format) }
-        return files.first { $0.id == book.primaryFileID } ?? files.first
+    /// The Book file a tap opens: its EPUB if it has one, since it reflows, otherwise its PDF,
+    /// otherwise its audiobook.
+    private static func readable(_ book: Book) -> BookFile? {
+        let supported = book.files.filter(\.isSupported)
+        return supported.first { $0.format == .epub } ?? supported.first { $0.format == .pdf }
+            ?? supported.first { $0.format == .audiobook }
     }
 
     private func open(_ file: BookFile, of book: Book) async {
-        switch file.format {
-        case .audiobook:
-            guard let player = await model.audiobookPlayer(for: book) else { return }
-            reading = OpenBookFile(title: book.title, content: .audiobook(player, cover: book.audiobookCover ?? book.cover))
-        default:
-            guard let reader = await model.epubReader(for: book, file: file) else { return }
-            reading = OpenBookFile(title: book.title, content: .epub(reader))
+        let reader: OpenBookFile.Reader? = switch file.format {
+        case .epub: await model.epubReader(for: book, file: file).map(OpenBookFile.Reader.epub)
+        case .pdf: await model.pdfReader(for: book, file: file).map(OpenBookFile.Reader.pdf)
+        case .audiobook: await model.audiobookPlayer(for: book).map { .audiobook($0, cover: book.audiobookCover ?? book.cover) }
+        default: nil
         }
+        guard let reader else { return }
+        reading = OpenBookFile(title: book.title, reader: reader)
     }
 
     private struct OpenBookFile: Identifiable {
-        enum Content {
+        enum Reader {
             case epub(EPUBReaderModel)
+            case pdf(PDFReaderModel)
             case audiobook(AudiobookPlayerModel, cover: Cover?)
         }
 
         let id = UUID()
         let title: String
-        let content: Content
+        let reader: Reader
     }
 
     private func refresh() async {
         do {
             _ = try await library.refresh()
             problem = nil
-        } catch .needsSignIn, .signedOut {
-            // The sign-in banner already explains this; keep showing the cached Books.
+        } catch .needsSignIn, .signedOut, .unreachable, .serverChanged {
+            // A banner already explains these; keep showing the cached Books.
             problem = nil
         } catch {
             problem = error
