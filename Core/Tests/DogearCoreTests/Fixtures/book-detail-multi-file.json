@@ -1,0 +1,73 @@
+{
+  "id": 21,
+  "title": "Moby-Dick; or, The Whale",
+  "authors": [
+    "Herman Melville"
+  ],
+  "thumbnailUrl": "/api/books/21/cover",
+  "libraryId": 2,
+  "addedOn": "2026-11-10T09:00:00Z",
+  "categories": [],
+  "language": "en",
+  "libraryName": "Ebook",
+  "shelves": [],
+  "primaryFileType": "EPUB",
+  "fileTypes": [
+    "EPUB",
+    "AUDIOBOOK",
+    "MOBI"
+  ],
+  "files": [
+    {
+      "id": 31,
+      "bookId": 21,
+      "fileName": "Moby-Dick - Herman Melville.epub",
+      "folderBased": false,
+      "bookType": "EPUB",
+      "fileSizeKb": 812,
+      "extension": "epub",
+      "addedOn": "2026-11-10T09:00:00Z",
+      "book": true,
+      "primary": true
+    },
+    {
+      "id": 32,
+      "bookId": 21,
+      "fileName": "Moby-Dick.m4b",
+      "folderBased": false,
+      "bookType": "AUDIOBOOK",
+      "fileSizeKb": 640112,
+      "extension": "m4b",
+      "addedOn": "2026-11-10T09:05:00Z",
+      "book": true,
+      "primary": false
+    },
+    {
+      "id": 33,
+      "bookId": 21,
+      "fileName": "Moby-Dick - Herman Melville.mobi",
+      "folderBased": false,
+      "bookType": "MOBI",
+      "fileSizeKb": 1020,
+      "extension": "mobi",
+      "addedOn": "2026-11-10T09:06:00Z",
+      "book": true,
+      "primary": false
+    },
+    {
+      "id": 34,
+      "bookId": 21,
+      "fileName": "Moby-Dick - Herman Melville.pdf",
+      "folderBased": false,
+      "bookType": "PDF",
+      "fileSizeKb": 2048,
+      "extension": "pdf",
+      "addedOn": "2026-11-10T09:07:00Z",
+      "book": false,
+      "primary": false
+    }
+  ],
+  "coverUpdatedOn": "2026-11-10T09:00:00Z",
+  "audiobookCoverUpdatedOn": "2026-11-10T09:05:00Z",
+  "isPhysical": false
+}
