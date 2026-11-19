@@ -121,6 +121,25 @@ struct OutboxTests {
         #expect(await relaunched.outboxCount() == 0)
     }
 
+    @Test func entriesTheServerCanNeverAcceptAreDroppedWithoutHoldingUpTheRest() async throws {
+        let shared = try await signedIn()
+        let reading = try positions()
+        try await reading.record(epub("OEBPS/ch01.xhtml", 0.01), bookFileID: 31, bookID: 7)
+        clock.advance(by: 60)
+        try await reading.record(epub("OEBPS/ch01.xhtml", 0.02), bookFileID: 90, bookID: 9)
+        clock.advance(by: 60)
+        try await reading.record(epub("OEBPS/ch02.xhtml", 0.03), bookFileID: 4, bookID: 4)
+        // Book 7 was deleted on the Server; Book 9 moved to a library the reader can't see.
+        server.answer("GET", "/api/v1/app/books/7/progress", with: FakeGrimmory.fixture("error-404-book", status: 404))
+        server.answer("PUT", "/api/v1/app/books/9/progress", with: FakeGrimmory.fixture("error-403", status: 403))
+
+        try await reading.flushOutbox(to: shared)
+
+        #expect(pushes.map(pushed).filter { $0.path.contains("/4/") }.map(\.percent) == [3])
+        #expect(await reading.outboxCount() == 0)
+        #expect(await reading.latest(bookFileID: 31) != nil)
+    }
+
     @Test func unreachableServerLeavesTheOutboxForLater() async throws {
         let shared = try await signedIn()
         let reading = try positions()

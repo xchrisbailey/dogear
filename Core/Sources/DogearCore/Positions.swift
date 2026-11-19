@@ -87,7 +87,8 @@ public actor Positions {
     }
 
     /// Pushes the Outbox to the Server, oldest first. Entries stay until the Server accepts them,
-    /// so an unreachable Server or an expired sign-in just leaves them for the next flush.
+    /// so an unreachable Server or an expired sign-in just leaves them for the next flush. An entry
+    /// for a Book that's gone or out of the reader's reach is dropped, since it can never be accepted.
     public func flushOutbox(to shared: SharedPositions) async throws(RequestError) {
         // One flush at a time, so an entry is never pushed twice. One already running may have
         // started before the latest Position was recorded, so this one runs after it.
@@ -108,8 +109,9 @@ public actor Positions {
         // Fetched once per Book before any of its entries are pushed: each push moves the Book's
         // `lastReadTime`, which would make its other Book files' entries look stale.
         var progress: [Int: SharedPositions.Progress] = [:]
-        do throws(RequestError) {
-            for entry in await cache.outbox() {
+        for entry in await cache.outbox() {
+            let position = entry.position
+            do throws(RequestError) {
                 let held: SharedPositions.Progress
                 if let fetched = progress[entry.bookID] {
                     held = fetched
@@ -117,7 +119,6 @@ public actor Positions {
                     held = try await shared.progress(bookID: entry.bookID)
                     progress[entry.bookID] = held
                 }
-                let position = entry.position
                 if let newer = held.position(position.location.format, bookFileID: position.bookFileID),
                    newer.recordedAt > position.recordedAt {
                     // A Stale entry (ADR 0002): newer reading happened elsewhere, so that's where the reader is.
@@ -126,12 +127,17 @@ public actor Positions {
                     continue
                 }
                 try await shared.push(position, bookID: entry.bookID)
-                try? await cache.accepted(position)
+                try? await cache.removeFromOutbox(position)
+            } catch .notFound, .forbidden {
+                // The Book is gone or out of the reader's reach, so retrying can never succeed.
+                // The Position stays on the device.
+                try? await cache.removeFromOutbox(position)
+            } catch {
+                // Offline, signed out or rate-limited: the rest would fail the same way.
+                return .failure(error)
             }
-            return .success(())
-        } catch {
-            return .failure(error)
         }
+        return .success(())
     }
 
     /// Drops every Position and the Outbox, so the next account or Server starts clean.
@@ -236,8 +242,9 @@ struct WaitingPosition: Sendable {
         }
     }
 
-    /// Removes `position` from the Outbox, unless newer reading replaced it while it was in flight.
-    func accepted(_ position: Position) throws {
+    /// Removes `position` from the Outbox, accepted or refused for good, unless newer reading
+    /// replaced it while it was in flight.
+    func removeFromOutbox(_ position: Position) throws {
         guard let entry = entry(position.bookFileID), entry.recordedAt == position.recordedAt else { return }
         modelContext.delete(entry)
         try modelContext.save()
