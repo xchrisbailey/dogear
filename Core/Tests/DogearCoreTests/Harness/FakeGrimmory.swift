@@ -1,0 +1,125 @@
+import Foundation
+import Synchronization
+
+/// A stand-in Grimmory Server built from real v3.5.0 responses (`Fixtures/`).
+/// Holds the state a real Server would (accounts, issued tokens) and records
+/// every request so tests can assert on what Dogear sent.
+final class FakeGrimmory: Sendable {
+    enum Kind: Sendable {
+        case grimmory
+        /// Some other web server at the address: everything is a 200 HTML page.
+        case notGrimmory
+        /// Nothing answers at the address.
+        case unreachable
+    }
+
+    struct Account: Sendable {
+        var username: String
+        var password: String
+        var isDefaultPassword = false
+    }
+
+    struct Request: Sendable {
+        var method: String
+        var path: String
+        var headers: [String: String]
+        var json: [String: any Sendable]?
+    }
+
+    struct Tokens: Sendable, Equatable {
+        var access: String
+        var refresh: String
+    }
+
+    static let address = "https://grimmory.example"
+    static let reader = Account(username: "reader", password: "correct horse")
+
+    private struct State {
+        var kind: Kind
+        var version: String
+        var accounts: [Account]
+        var issued: [Tokens] = []
+        var requests: [Request] = []
+    }
+
+    private let state: Mutex<State>
+
+    init(kind: Kind = .grimmory, version: String = "v3.5.0", accounts: [Account] = [FakeGrimmory.reader]) {
+        state = Mutex(State(kind: kind, version: version, accounts: accounts))
+    }
+
+    /// A URLSession whose requests are answered by this fake.
+    var session: URLSession {
+        FakeServer.session { [self] request, body in handle(request, body: body) }
+    }
+
+    var requests: [Request] { state.withLock { $0.requests } }
+    var issuedTokens: [Tokens] { state.withLock { $0.issued } }
+
+    private func handle(_ request: URLRequest, body: Data?) -> FakeServer.Reply {
+        state.withLock { state in
+            let recorded = Request(
+                method: request.httpMethod ?? "GET",
+                path: request.url?.path ?? "",
+                headers: request.allHTTPHeaderFields ?? [:],
+                json: body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: any Sendable] }
+            )
+            state.requests.append(recorded)
+
+            switch state.kind {
+            case .unreachable: return .failure(.cannotConnectToHost)
+            case .notGrimmory: return Self.spaPage
+            case .grimmory: break
+            }
+
+            switch (recorded.method, recorded.path) {
+            case ("GET", "/api/v1/healthcheck"):
+                return Self.fixture("healthcheck", replacing: ["v3.5.0": state.version])
+            case ("POST", "/api/v1/auth/login"):
+                return Self.login(recorded.json, state: &state)
+            case ("GET", "/api/v1/version"):
+                guard Self.isAuthorized(recorded, state: state) else {
+                    return Self.fixture("error-401-unauthenticated", status: 401)
+                }
+                return Self.fixture("version", replacing: ["v3.5.0": state.version])
+            default:
+                // Grimmory answers unknown paths with its web app, not a 404.
+                return Self.spaPage
+            }
+        }
+    }
+
+    private static func login(_ json: [String: any Sendable]?, state: inout State) -> FakeServer.Reply {
+        let username = json?["username"] as? String
+        let password = json?["password"] as? String
+        guard let account = state.accounts.first(where: { $0.username == username && $0.password == password }) else {
+            return fixture("login-wrong-password", status: 401)
+        }
+        let n = state.issued.count + 1
+        let tokens = Tokens(access: "access-\(n)", refresh: "refresh-\(n)")
+        state.issued.append(tokens)
+        return fixture(
+            account.isDefaultPassword ? "login-default-password" : "login-success",
+            replacing: ["<ACCESS_TOKEN>": tokens.access, "<REFRESH_TOKEN>": tokens.refresh]
+        )
+    }
+
+    private static func isAuthorized(_ request: Request, state: State) -> Bool {
+        guard let header = request.headers["Authorization"], header.hasPrefix("Bearer ") else { return false }
+        let token = String(header.dropFirst("Bearer ".count))
+        return state.issued.contains { $0.access == token }
+    }
+
+    private static let spaPage = FakeServer.Reply.response(
+        status: 200, body: Data("<!doctype html><html><body>app</body></html>".utf8), contentType: "text/html"
+    )
+
+    static func fixture(_ name: String, status: Int = 200, replacing: [String: String] = [:]) -> FakeServer.Reply {
+        let url = Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Fixtures")!
+        var text = try! String(contentsOf: url, encoding: .utf8)
+        for (placeholder, value) in replacing {
+            text = text.replacingOccurrences(of: placeholder, with: value)
+        }
+        return .response(status: status, body: Data(text.utf8))
+    }
+}

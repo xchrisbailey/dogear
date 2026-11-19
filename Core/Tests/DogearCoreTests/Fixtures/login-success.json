@@ -1,0 +1,6 @@
+{
+  "accessToken": "<ACCESS_TOKEN>",
+  "expires": 7200,
+  "isDefaultPassword": false,
+  "refreshToken": "<REFRESH_TOKEN>"
+}
