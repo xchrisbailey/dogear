@@ -23,6 +23,9 @@ final class AudiobookPlayerModel {
     private(set) var isPlaying = false
     /// The stream stopped and couldn't be recovered; shown instead of silently stopping.
     private(set) var problem: String?
+    /// Kept on the player, not the item, so it survives the rebuild when the token changes.
+    private(set) var speed: Float
+    private(set) var sleepTimer: SleepTimer?
 
     let title: String
     private let author: String?
@@ -40,6 +43,10 @@ final class AudiobookPlayerModel {
     private var timeControl: NSKeyValueObservation?
     private var timeObservers: [Any] = []
     private var failureObserver: (any NSObjectProtocol)?
+    private var sessionObservers: [any NSObjectProtocol] = []
+    /// Set when an interruption (a call, Siri) stopped playback, so its end can resume it.
+    private var interruptedWhilePlaying = false
+    private var lastTick: ContinuousClock.Instant?
     private var recording: Task<Void, Never>?
     private var artwork: MPMediaItemArtwork?
     /// While an item is rebuilt or a seek lands, the player reports times and pauses that aren't
@@ -47,6 +54,10 @@ final class AudiobookPlayerModel {
     private var repositioning = 0
 
     private static let saveInterval = CMTime(seconds: 5, preferredTimescale: 1)
+    static let speeds: [Float] = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+    static let skipBack: Duration = .seconds(15)
+    static let skipForward: Duration = .seconds(30)
+    private static let speedKey = "playbackSpeed"
     private static let log = Logger(subsystem: "com.xchrisbailey.Dogear", category: "Player")
 
     init(
@@ -59,6 +70,9 @@ final class AudiobookPlayerModel {
         self.positions = positions
         self.sharedPositions = sharedPositions
         self.cover = cover
+        let saved = UserDefaults.standard.float(forKey: Self.speedKey)
+        speed = Self.speeds.contains(saved) ? saved : 1
+        player.defaultRate = speed
     }
 
     var chapter: AudiobookInfo.Chapter? {
@@ -84,6 +98,7 @@ final class AudiobookPlayerModel {
             Self.log.error("Audio session category failed: \(error.localizedDescription)")
         }
         observePlayer()
+        observeSession()
         configureRemoteCommands()
         state = .ready
         record(share: false)
@@ -132,6 +147,7 @@ final class AudiobookPlayerModel {
     func seek(to time: Duration) {
         let time = max(.zero, min(time, info?.duration ?? time))
         currentTime = time
+        if let info { sleepTimer?.moved(to: time, in: info) }
         reposition()
         updateNowPlaying()
         record(share: true)
@@ -139,6 +155,29 @@ final class AudiobookPlayerModel {
 
     func go(to chapter: AudiobookInfo.Chapter) {
         seek(to: chapter.start)
+    }
+
+    /// Back when `interval` is negative. Whole-book time, so it crosses Chapters and Tracks alike.
+    func skip(by interval: Duration) {
+        guard let info else { return }
+        seek(to: info.skip(from: currentTime, by: interval))
+    }
+
+    func setSpeed(_ speed: Float) {
+        self.speed = speed
+        UserDefaults.standard.set(speed, forKey: Self.speedKey)
+        // `defaultRate` is what `play()` uses, including after an item rebuild.
+        player.defaultRate = speed
+        if isPlaying { player.rate = speed }
+        updateNowPlaying()
+    }
+
+    func setSleepTimer(_ mode: SleepTimer.Mode?) {
+        guard let info, let mode else {
+            sleepTimer = nil
+            return
+        }
+        sleepTimer = SleepTimer(mode, at: currentTime, in: info)
     }
 
     /// A new token (or a retry after a failure): a fresh item at the same second, playing if it was.
@@ -248,13 +287,64 @@ final class AudiobookPlayerModel {
         let previousChapter = chapter
         currentTime = .seconds(time.seconds)
         if chapter != previousChapter { updateNowPlaying() }
+        runSleepTimer()
+    }
+
+    /// Counts wall-clock listening, so a pause doesn't use up the timer and 2× doesn't halve it.
+    private func runSleepTimer() {
+        let now = ContinuousClock.now
+        defer { lastTick = isPlaying ? now : nil }
+        guard isPlaying, let lastTick, sleepTimer != nil else { return }
+        if sleepTimer?.played(lastTick.duration(to: now), to: currentTime) == true {
+            Self.log.info("Sleep timer stopped playback")
+            sleepTimer = nil
+            pause()
+        }
     }
 
     private func playingChanged(_ playing: Bool) {
         guard repositioning == 0, playing != isPlaying else { return }
         isPlaying = playing
+        lastTick = playing ? .now : nil
         updateNowPlaying()
         if !playing { record(share: true) }
+    }
+
+    // MARK: Interruptions and headphones
+
+    private func observeSession() {
+        let center = NotificationCenter.default
+        sessionObservers.append(center.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+        ) { @Sendable [weak self] note in
+            let type = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt).flatMap(AVAudioSession.InterruptionType.init)
+            let options = AVAudioSession.InterruptionOptions(rawValue: note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0)
+            MainActor.assumeIsolated { self?.interrupted(type, options: options) }
+        })
+        sessionObservers.append(center.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main
+        ) { @Sendable [weak self] note in
+            let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt).flatMap(AVAudioSession.RouteChangeReason.init)
+            // Headphones unplugged or disconnected: never carry on out loud.
+            guard reason == .oldDeviceUnavailable else { return }
+            MainActor.assumeIsolated { self?.pause() }
+        })
+    }
+
+    private func interrupted(_ type: AVAudioSession.InterruptionType?, options: AVAudioSession.InterruptionOptions) {
+        switch type {
+        case .began:
+            // The system has already paused the player; `isPlaying` still says whether it was playing.
+            interruptedWhilePlaying = isPlaying
+            pause()
+        case .ended:
+            // The system says whether resuming suits the interruption (yes after a call, no after
+            // another app took over playback).
+            if interruptedWhilePlaying, options.contains(.shouldResume) { play() }
+            interruptedWhilePlaying = false
+        default:
+            break
+        }
     }
 
     // MARK: Positions
@@ -300,6 +390,9 @@ final class AudiobookPlayerModel {
         timeObservers = []
         if let failureObserver { NotificationCenter.default.removeObserver(failureObserver) }
         failureObserver = nil
+        for observer in sessionObservers { NotificationCenter.default.removeObserver(observer) }
+        sessionObservers = []
+        sleepTimer = nil
         player.removeAllItems()
         itemStatus = nil
         timeControl = nil
@@ -330,16 +423,43 @@ final class AudiobookPlayerModel {
             self.seek(to: .seconds(event.positionTime))
             return .success
         }
-        for command in [center.playCommand, center.pauseCommand, center.togglePlayPauseCommand, center.changePlaybackPositionCommand] {
+        center.skipBackwardCommand.preferredIntervals = [NSNumber(value: Self.skipBack.seconds)]
+        center.skipBackwardCommand.addTarget { [weak self] event in
+            let interval = (event as? MPSkipIntervalCommandEvent)?.interval ?? Self.skipBack.seconds
+            self?.skip(by: .seconds(-interval))
+            return .success
+        }
+        center.skipForwardCommand.preferredIntervals = [NSNumber(value: Self.skipForward.seconds)]
+        center.skipForwardCommand.addTarget { [weak self] event in
+            let interval = (event as? MPSkipIntervalCommandEvent)?.interval ?? Self.skipForward.seconds
+            self?.skip(by: .seconds(interval))
+            return .success
+        }
+        center.changePlaybackRateCommand.supportedPlaybackRates = Self.speeds.map { NSNumber(value: $0) }
+        center.changePlaybackRateCommand.addTarget { [weak self] event in
+            guard let self, let event = event as? MPChangePlaybackRateCommandEvent else { return .commandFailed }
+            self.setSpeed(event.playbackRate)
+            return .success
+        }
+        for command in Self.remoteCommands(center) {
             command.isEnabled = true
         }
+        // The lock screen shows skip buttons only while track buttons are off.
+        center.nextTrackCommand.isEnabled = false
+        center.previousTrackCommand.isEnabled = false
     }
 
     private func clearRemoteCommands() {
-        let center = MPRemoteCommandCenter.shared()
-        for command in [center.playCommand, center.pauseCommand, center.togglePlayPauseCommand, center.changePlaybackPositionCommand] {
+        for command in Self.remoteCommands(.shared()) {
             command.removeTarget(nil)
         }
+    }
+
+    private static func remoteCommands(_ center: MPRemoteCommandCenter) -> [MPRemoteCommand] {
+        [
+            center.playCommand, center.pauseCommand, center.togglePlayPauseCommand, center.changePlaybackPositionCommand,
+            center.skipBackwardCommand, center.skipForwardCommand, center.changePlaybackRateCommand,
+        ]
     }
 
     /// Elapsed time and rate only on changes; the system extrapolates in between.
@@ -349,7 +469,8 @@ final class AudiobookPlayerModel {
             MPMediaItemPropertyTitle: title,
             MPMediaItemPropertyPlaybackDuration: info.duration.seconds,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime.seconds,
-            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? Double(player.rate) : 0.0,
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? Double(speed) : 0.0,
+            MPNowPlayingInfoPropertyDefaultPlaybackRate: Double(speed),
             MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
         ]
         if let author { nowPlaying[MPMediaItemPropertyArtist] = author }
