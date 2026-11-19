@@ -35,9 +35,9 @@ struct LibraryView: View {
             .pickerStyle(.segmented)
             .listRowSeparator(.hidden)
             ForEach(books) { book in
-                if let epub = book.files.first(where: { $0.format == .epub && $0.isSupported }) {
+                if let file = Self.readable(book) {
                     Button {
-                        Task { await open(epub, of: book) }
+                        Task { await open(file, of: book) }
                     } label: {
                         BookRow(book: book, library: library)
                     }
@@ -57,7 +57,10 @@ struct LibraryView: View {
             }
         }
         .fullScreenCover(item: $reading) { open in
-            EPUBReaderView(title: open.title, model: open.reader)
+            switch open.reader {
+            case let .epub(reader): EPUBReaderView(title: open.title, model: reader)
+            case let .pdf(reader): PDFReaderView(title: open.title, model: reader)
+            }
         }
         .refreshable { await refresh() }
         .task(id: canSync) {
@@ -88,15 +91,31 @@ struct LibraryView: View {
         books = await library.books(in: scope, matching: search, showing: kind)
     }
 
+    /// The Book file a tap opens: its EPUB if it has one, since it reflows, otherwise its PDF.
+    private static func readable(_ book: Book) -> BookFile? {
+        let supported = book.files.filter(\.isSupported)
+        return supported.first { $0.format == .epub } ?? supported.first { $0.format == .pdf }
+    }
+
     private func open(_ file: BookFile, of book: Book) async {
-        guard let reader = await model.epubReader(for: book, file: file) else { return }
+        let reader: OpenBookFile.Reader? = switch file.format {
+        case .epub: await model.epubReader(for: book, file: file).map(OpenBookFile.Reader.epub)
+        case .pdf: await model.pdfReader(for: book, file: file).map(OpenBookFile.Reader.pdf)
+        default: nil
+        }
+        guard let reader else { return }
         reading = OpenBookFile(title: book.title, reader: reader)
     }
 
     private struct OpenBookFile: Identifiable {
+        enum Reader {
+            case epub(EPUBReaderModel)
+            case pdf(PDFReaderModel)
+        }
+
         let id = UUID()
         let title: String
-        let reader: EPUBReaderModel
+        let reader: Reader
     }
 
     private func refresh() async {

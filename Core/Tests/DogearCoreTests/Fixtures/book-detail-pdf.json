@@ -1,0 +1,38 @@
+{
+  "id": 9,
+  "title": "Flatland: A Romance of Many Dimensions",
+  "authors": [
+    "Edwin A. Abbott"
+  ],
+  "thumbnailUrl": "/api/books/9/cover",
+  "readStatus": "READING",
+  "libraryId": 2,
+  "addedOn": "2026-11-12T08:00:00Z",
+  "lastReadTime": "2026-11-19T15:41:00Z",
+  "categories": [],
+  "language": "en",
+  "libraryName": "Ebook",
+  "shelves": [],
+  "readProgress": 4.8,
+  "pageCount": 250,
+  "primaryFileType": "PDF",
+  "fileTypes": [
+    "PDF"
+  ],
+  "files": [
+    {
+      "id": 21,
+      "bookId": 9,
+      "fileName": "Flatland - Edwin A. Abbott.pdf",
+      "folderBased": false,
+      "bookType": "PDF",
+      "fileSizeKb": 2310,
+      "extension": "pdf",
+      "addedOn": "2026-11-12T08:00:00Z",
+      "book": true,
+      "primary": true
+    }
+  ],
+  "coverUpdatedOn": "2026-11-12T08:00:00Z",
+  "isPhysical": false
+}
