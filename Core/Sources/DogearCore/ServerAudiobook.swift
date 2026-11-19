@@ -116,6 +116,33 @@ public struct AudiobookInfo: Decodable, Sendable, Equatable {
         chapters.last { $0.start <= time } ?? chapters.first
     }
 
+    /// The Track playing at `time` into the whole Book file; nil for single-file audiobooks.
+    public func track(at time: Duration) -> Track? {
+        tracks.last { $0.start <= time } ?? tracks.first
+    }
+
+    /// The Position for `time` into the whole Book file: the Track and the milliseconds into it.
+    /// Single-file audiobooks are Track 0.
+    public func location(at time: Duration) -> AudiobookLocation {
+        let track = track(at: time)
+        let offset = time - (track?.start ?? .zero)
+        return AudiobookLocation(
+            trackIndex: track?.index ?? 0,
+            milliseconds: Int(offset / .milliseconds(1)),
+            bookProgress: duration > .zero ? min(1, max(0, time / duration)) : 0
+        )
+    }
+
+    /// Where `location` is in the whole Book file. Single-file audiobooks ignore the Track.
+    public func time(of location: AudiobookLocation) -> Duration {
+        let offset = Duration.milliseconds(location.milliseconds)
+        guard !tracks.isEmpty else { return min(offset, duration) }
+        // A Position recorded against Tracks the Server no longer lists (files changed on disk)
+        // resumes at the end rather than somewhere unrelated.
+        guard let track = tracks.first(where: { $0.index == location.trackIndex }) else { return duration }
+        return track.start + min(offset, track.duration)
+    }
+
     private struct Payload: Decodable {
         struct Chapter: Decodable {
             var index: Int

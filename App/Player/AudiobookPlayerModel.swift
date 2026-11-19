@@ -7,8 +7,11 @@ import UIKit
 /// Streams a Server audiobook, keeps the listener's Position on the device and shares it with
 /// Grimmory's web player.
 ///
-/// A single-file audiobook is one player item at Track 0. Items carry the access token in their
-/// URL, so whenever it changes they're rebuilt and playback seeks back to the same second.
+/// A single-file audiobook is one player item at Track 0; a folder audiobook queues one item per
+/// Track from the playing one onwards, so the next Track is preloaded and starts without a gap.
+/// `currentTime` is always whole-book time; the Position maps it to a Track and the milliseconds
+/// into it. Items carry the access token in their URL, so whenever it changes they're rebuilt and
+/// playback seeks back to the same second.
 @Observable
 final class AudiobookPlayerModel {
     enum State {
@@ -36,7 +39,9 @@ final class AudiobookPlayerModel {
     private var streams: Task<Void, Never>?
     /// Reauthorizing once per failure: a failure that survives a fresh token isn't about the token.
     private var hasReauthorized = false
-    private var itemStatus: NSKeyValueObservation?
+    private var itemStatus: [NSKeyValueObservation] = []
+    /// Where each queued item starts in the whole Book file.
+    private var itemStarts: [ObjectIdentifier: Duration] = [:]
     private var timeControl: NSKeyValueObservation?
     private var timeObservers: [Any] = []
     private var failureObserver: (any NSObjectProtocol)?
@@ -63,6 +68,11 @@ final class AudiobookPlayerModel {
 
     var chapter: AudiobookInfo.Chapter? {
         info?.chapter(at: currentTime)
+    }
+
+    /// The Track playing, for folder audiobooks.
+    var track: AudiobookInfo.Track? {
+        info?.track(at: currentTime)
     }
 
     var bookFileID: Int? { info?.bookFileID }
@@ -105,7 +115,7 @@ final class AudiobookPlayerModel {
         let shared = try? await sharedPositions?.latest(.audiobook, bookID: audiobook.bookID, bookFileID: bookFileID)
         let newest = [local, shared].compactMap(\.self).max { $0.recordedAt < $1.recordedAt }
         guard case let .audiobook(location)? = newest?.location else { return .zero }
-        return .milliseconds(location.milliseconds)
+        return info?.time(of: location) ?? .zero
     }
 
     // MARK: Playback
@@ -131,8 +141,14 @@ final class AudiobookPlayerModel {
 
     func seek(to time: Duration) {
         let time = max(.zero, min(time, info?.duration ?? time))
+        let trackChanged = info?.track(at: time) != track
         currentTime = time
-        reposition()
+        // The queue only holds the playing Track onwards, so another Track needs a new queue.
+        if trackChanged, let stream {
+            requeue(with: stream)
+        } else {
+            reposition()
+        }
         updateNowPlaying()
         record(share: true)
     }
@@ -141,27 +157,52 @@ final class AudiobookPlayerModel {
         seek(to: chapter.start)
     }
 
+    func go(to track: AudiobookInfo.Track) {
+        seek(to: track.start)
+    }
+
     /// A new token (or a retry after a failure): a fresh item at the same second, playing if it was.
     private func rebuild(with stream: AudiobookStream) {
         guard stream != self.stream || player.currentItem == nil else { return }
+        requeue(with: stream)
+    }
+
+    /// Fresh items from the Track at `currentTime` onwards, seeked to it, playing if it was.
+    private func requeue(with stream: AudiobookStream) {
+        guard let info else { return }
         let resume = isPlaying || player.timeControlStatus == .waitingToPlayAtSpecifiedRate
-        Self.log.info("Building player item at \(self.currentTime.seconds, format: .fixed(precision: 1)) s")
+        Self.log.info("Building player items at \(self.currentTime.seconds, format: .fixed(precision: 1)) s")
         self.stream = stream
-        let item = AVPlayerItem(url: stream.wholeBook)
-        item.audioTimePitchAlgorithm = .timeDomain
-        watch(item)
+        let queue: [(url: URL, start: Duration)] = if let playing = info.track(at: currentTime) {
+            info.tracks.filter { $0.index >= playing.index }.map { (stream.track($0.index), $0.start) }
+        } else {
+            [(stream.wholeBook, .zero)]
+        }
         repositioning += 1
         player.removeAllItems()
-        player.insert(item, after: nil)
+        itemStatus = []
+        itemStarts = [:]
+        for (url, start) in queue {
+            let item = AVPlayerItem(url: url)
+            item.audioTimePitchAlgorithm = .timeDomain
+            itemStarts[ObjectIdentifier(item)] = start
+            watch(item)
+            player.insert(item, after: nil)
+        }
         repositioning -= 1
         reposition()
         if resume { player.play() }
     }
 
+    /// Where the playing item starts in the whole Book file.
+    private var itemStart: Duration {
+        player.currentItem.flatMap { itemStarts[ObjectIdentifier($0)] } ?? .zero
+    }
+
     /// Seeks to `currentTime` exactly, ignoring the player's reports until it lands.
     private func reposition() {
         repositioning += 1
-        player.seek(to: CMTime(currentTime), toleranceBefore: .zero, toleranceAfter: .zero) { @Sendable [weak self] _ in
+        player.seek(to: CMTime(currentTime - itemStart), toleranceBefore: .zero, toleranceAfter: .zero) { @Sendable [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.repositioning -= 1
@@ -173,11 +214,11 @@ final class AudiobookPlayerModel {
     /// An invalid token fails the item without any error log or notification from the player
     /// itself, so the item's status is watched directly.
     private func watch(_ item: AVPlayerItem) {
-        itemStatus = item.observe(\.status) { @Sendable [weak self] item, _ in
+        itemStatus.append(item.observe(\.status) { @Sendable [weak self] item, _ in
             let status = item.status
             let reason = item.error?.localizedDescription
             Task { @MainActor in self?.itemStatusChanged(status, reason: reason) }
-        }
+        })
     }
 
     private func itemStatusChanged(_ status: AVPlayerItem.Status, reason: String?) {
@@ -245,9 +286,9 @@ final class AudiobookPlayerModel {
 
     private func tick(_ time: CMTime) {
         guard repositioning == 0, player.currentItem != nil, time.isNumeric else { return }
-        let previousChapter = chapter
-        currentTime = .seconds(time.seconds)
-        if chapter != previousChapter { updateNowPlaying() }
+        let previous = (chapter, track)
+        currentTime = itemStart + .seconds(time.seconds)
+        if (chapter, track) != previous { updateNowPlaying() }
     }
 
     private func playingChanged(_ playing: Bool) {
@@ -261,12 +302,7 @@ final class AudiobookPlayerModel {
 
     private func record(share: Bool) {
         guard let info else { return }
-        let duration = info.duration
-        let location = Position.Location.audiobook(AudiobookLocation(
-            trackIndex: 0,
-            milliseconds: Int(currentTime / .milliseconds(1)),
-            bookProgress: duration > .zero ? min(1, currentTime / duration) : 0
-        ))
+        let location = Position.Location.audiobook(info.location(at: currentTime))
         // Chained so a slow save can't land after a newer one and win.
         recording = Task { [previous = recording, positions, sharedPositions, bookID = audiobook.bookID, bookFileID = info.bookFileID] in
             await previous?.value
@@ -301,7 +337,8 @@ final class AudiobookPlayerModel {
         if let failureObserver { NotificationCenter.default.removeObserver(failureObserver) }
         failureObserver = nil
         player.removeAllItems()
-        itemStatus = nil
+        itemStatus = []
+        itemStarts = [:]
         timeControl = nil
         clearRemoteCommands()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -357,6 +394,8 @@ final class AudiobookPlayerModel {
             nowPlaying[MPMediaItemPropertyAlbumTitle] = chapter.title
             nowPlaying[MPNowPlayingInfoPropertyChapterNumber] = chapter.index
             nowPlaying[MPNowPlayingInfoPropertyChapterCount] = info.chapters.count
+        } else if let track {
+            nowPlaying[MPMediaItemPropertyAlbumTitle] = track.title ?? "Track \(track.index + 1)"
         }
         if let artwork { nowPlaying[MPMediaItemPropertyArtwork] = artwork }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlaying
