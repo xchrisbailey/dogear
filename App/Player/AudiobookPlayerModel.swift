@@ -50,7 +50,7 @@ final class AudiobookPlayerModel {
     /// Set when an interruption (a call, Siri) stopped playback, so its end can resume it.
     private var interruptedWhilePlaying = false
     private var lastTick: ContinuousClock.Instant?
-    private var recording: Task<Void, Never>?
+    private let recorder: PositionRecorder
     private var artwork: MPMediaItemArtwork?
     /// While an item is rebuilt or a seek lands, the player reports times and pauses that aren't
     /// the listener's, which must not be saved as their Position.
@@ -72,6 +72,7 @@ final class AudiobookPlayerModel {
         self.author = author
         self.positions = positions
         self.sharedPositions = sharedPositions
+        recorder = PositionRecorder(bookID: audiobook.bookID, positions: positions, sharedPositions: sharedPositions)
         self.cover = cover
         let saved = UserDefaults.standard.float(forKey: Self.speedKey)
         speed = Self.speeds.contains(saved) ? saved : 1
@@ -387,24 +388,11 @@ final class AudiobookPlayerModel {
     private func record(share: Bool) {
         guard let info else { return }
         let location = Position.Location.audiobook(info.location(at: currentTime))
-        // Chained so a slow save can't land after a newer one and win.
-        recording = Task { [previous = recording, positions, sharedPositions, bookID = audiobook.bookID, bookFileID = info.bookFileID] in
-            await previous?.value
-            guard let positions else {
-                // Without the on-device store there's no Outbox; sharing directly is the best left.
-                if share {
-                    let position = Position(bookFileID: bookFileID, location: location, recordedAt: Date())
-                    try? await sharedPositions?.push(position, bookID: bookID)
-                }
-                return
-            }
-            if share {
-                _ = try? await positions.record(location, bookFileID: bookFileID, bookID: bookID)
-                // Failures stay in the Outbox. A refresh here also hands the player a new token.
-                if let sharedPositions { try? await positions.flushOutbox(to: sharedPositions) }
-            } else {
-                _ = try? await positions.recordLanding(location, bookFileID: bookFileID)
-            }
+        recorder.record(bookFileID: info.bookFileID, share: share) {
+            location
+        } afterSharing: { [positions, sharedPositions] in
+            // Failures stay in the Outbox. A refresh here also hands the player a new token.
+            if let positions, let sharedPositions { try? await positions.flushOutbox(to: sharedPositions) }
         }
     }
 
@@ -430,7 +418,7 @@ final class AudiobookPlayerModel {
         clearRemoteCommands()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        await recording?.value
+        await recorder.finished()
     }
 
     // MARK: Lock screen and Control Center

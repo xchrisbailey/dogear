@@ -30,7 +30,7 @@ final class PDFReaderModel: PDFNavigatorDelegate {
     private let positions: Positions?
     private let sharedPositions: SharedPositions?
     private let pageTurns = DirectionalNavigationAdapter()
-    private var recording: Task<Void, Never>?
+    private let recorder: PositionRecorder
     /// The first location is where the reader opened, not new reading.
     private var hasLanded = false
     private var pushing: Task<Void, Never>?
@@ -42,6 +42,7 @@ final class PDFReaderModel: PDFNavigatorDelegate {
         self.bookFileID = bookFileID
         self.positions = positions
         self.sharedPositions = sharedPositions
+        recorder = PositionRecorder(bookID: pdf.bookID, positions: positions, sharedPositions: sharedPositions)
     }
 
     private var navigator: PDFNavigatorViewController? {
@@ -118,24 +119,10 @@ final class PDFReaderModel: PDFNavigatorDelegate {
     private func record(_ page: Int, share: Bool) {
         // Matches the web reader, which shares page ÷ page count.
         let throughBook = pageCount.map { Double(page) / Double(max($0, 1)) } ?? 0
-        let location = Position.Location.pdf(PDFLocation(page: page, throughBook: throughBook))
-        // Chained so a slow save can't land after a newer one and win.
-        recording = Task { [previous = recording, positions, sharedPositions, bookFileID, bookID = pdf.bookID] in
-            await previous?.value
-            guard let positions else {
-                // Without the on-device store there's no Outbox; sharing directly is the best left.
-                if share {
-                    let position = Position(bookFileID: bookFileID, location: location, recordedAt: Date())
-                    try? await sharedPositions?.push(position, bookID: bookID)
-                }
-                return
-            }
-            if share {
-                _ = try? await positions.record(location, bookFileID: bookFileID, bookID: bookID)
-                self.pushSoon()
-            } else {
-                _ = try? await positions.recordLanding(location, bookFileID: bookFileID)
-            }
+        recorder.record(bookFileID: bookFileID, share: share) {
+            .pdf(PDFLocation(page: page, throughBook: throughBook))
+        } afterSharing: {
+            self.pushSoon()
         }
     }
 
@@ -154,7 +141,7 @@ final class PDFReaderModel: PDFNavigatorDelegate {
         if let fetched { try? FileManager.default.removeItem(at: fetched) }
         fetched = nil
         pushing?.cancel()
-        await recording?.value
+        await recorder.finished()
         guard let positions, let sharedPositions else { return }
         try? await positions.flushOutbox(to: sharedPositions)
     }
