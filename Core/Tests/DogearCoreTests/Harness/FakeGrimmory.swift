@@ -45,6 +45,8 @@ final class FakeGrimmory: Sendable {
         var requests: [Request] = []
         var library: [ShelvedBook] = []
         var shelves: [Shelf] = []
+        /// `app-progress-*` fixture names by Book id.
+        var sharedPositions: [Int: String] = [:]
     }
 
     let state: Mutex<State>
@@ -106,7 +108,7 @@ final class FakeGrimmory: Sendable {
                 return Self.fixture("version", replacing: ["v3.5.0": state.version])
             default:
                 // Grimmory answers unknown paths with its web app, not a 404.
-                return Self.library(recorded, state: state) ?? Self.epub(recorded, state: state) ?? Self.spaPage
+                return Self.progress(recorded, state: state) ?? Self.library(recorded, state: state) ?? Self.epub(recorded, state: state) ?? Self.spaPage
             }
         }
     }

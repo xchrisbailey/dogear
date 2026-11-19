@@ -21,7 +21,12 @@ targets:
   Dogear:
     type: application
     platform: iOS
-    sources: [App]
+    sources:
+      - path: App
+        excludes: ["Reader/Resources/**"]
+      # The CFI bridge's scripts, loaded from the app bundle as WKUserScripts.
+      - path: App/Reader/Resources
+        buildPhase: resources
     dependencies:
       - package: DogearCore
       - {package: Readium, product: ReadiumShared}
@@ -36,7 +41,26 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         TARGETED_DEVICE_FAMILY: "1,2"
         # No NSAppTransportSecurity exceptions: HTTPS only (spec #1).
+  DogearTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: AppTests
+        excludes: ["Fixtures/**"]
+      - path: AppTests/Fixtures/LighthouseLedger
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: Dogear
+      - {package: Readium, product: ReadiumShared}
+      - {package: Readium, product: ReadiumStreamer}
+      - {package: Readium, product: ReadiumNavigator}
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
 schemes:
   Dogear:
     build:
-      targets: {Dogear: all}
+      targets: {Dogear: all, DogearTests: [test]}
+    test:
+      targets: [DogearTests]

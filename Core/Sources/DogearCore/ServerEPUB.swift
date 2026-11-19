@@ -8,6 +8,8 @@ import Foundation
 public struct ServerEPUB: Sendable {
     private let account: Account
 
+    public let bookID: Int
+
     /// Entries are paths relative to this, e.g. `META-INF/container.xml`.
     public let baseURL: URL
 
@@ -15,6 +17,7 @@ public struct ServerEPUB: Sendable {
     public init?(account: Account, bookID: Int) async {
         guard let server = await account.session?.server else { return nil }
         self.account = account
+        self.bookID = bookID
         // Trailing slash so relative entry paths resolve inside the file endpoint.
         baseURL = server.appending(path: "api/v1/epub/\(bookID)/file/")
     }
