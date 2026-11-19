@@ -40,6 +40,19 @@ final class AppModel {
         )
     }
 
+    /// A player for the Book's audiobook, streamed from the Server. nil when signed out.
+    func audiobookPlayer(for book: Book) async -> AudiobookPlayerModel? {
+        guard let audiobook = await ServerAudiobook(account: account, bookID: book.id) else { return nil }
+        let cover = book.audiobookCover ?? book.cover
+        return AudiobookPlayerModel(
+            audiobook: audiobook, title: book.title, author: book.authors.first,
+            positions: positions, sharedPositions: sharedPositions
+        ) { [library] in
+            guard let cover else { return nil }
+            return await library?.image(for: cover)
+        }
+    }
+
     /// Follows the Session for the app's lifetime, so a refused refresh anywhere shows up here.
     /// Each usable Session flushes the Outbox, which covers launch and signing in again.
     func observeSession() async {

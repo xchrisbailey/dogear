@@ -21,6 +21,15 @@ public struct SharedPositions: Sendable {
                 progressPercent: location.bookProgress * 100,
                 contentSourceProgressPercent: location.chapterProgress * 100
             ))
+        case let .audiobook(location):
+            body = FileProgressUpdate(fileProgress: .init(
+                bookFileId: position.bookFileID,
+                positionData: String(location.milliseconds),
+                positionHref: String(location.trackIndex),
+                // Rounded to 0.1 like the web player's saves.
+                progressPercent: (location.bookProgress * 1000).rounded() / 10,
+                contentSourceProgressPercent: nil
+            ))
         }
         var request = try await request(bookID: bookID)
         request.httpMethod = "PUT"
@@ -62,7 +71,7 @@ public struct SharedPositions: Sendable {
             var positionData: String?
             var positionHref: String
             var progressPercent: Double
-            var contentSourceProgressPercent: Double
+            var contentSourceProgressPercent: Double?
         }
 
         var fileProgress: FileProgress
@@ -78,7 +87,15 @@ public struct SharedPositions: Sendable {
             var updatedAt: String?
         }
 
+        struct Audiobook: Decodable {
+            var positionMs: Int?
+            var trackIndex: Int?
+            var percentage: Double?
+            var updatedAt: String?
+        }
+
         var epubProgress: EPUB?
+        var audiobookProgress: Audiobook?
 
         /// Compared by the format's own `updatedAt` rather than the Book's `lastReadTime`, which
         /// also moves when another of the Book's files is read.
@@ -96,6 +113,17 @@ public struct SharedPositions: Sendable {
                     cfi: epub.cfi
                 )
                 return Position(bookFileID: bookFileID, location: .epub(location), recordedAt: recordedAt)
+            case .audiobook:
+                guard let audiobook = audiobookProgress, let milliseconds = audiobook.positionMs,
+                      let recordedAt = audiobook.updatedAt.flatMap(SharedPositions.date)
+                else { return nil }
+                let location = AudiobookLocation(
+                    // The web player only saves a Track for folder audiobooks.
+                    trackIndex: audiobook.trackIndex ?? 0,
+                    milliseconds: milliseconds,
+                    bookProgress: (audiobook.percentage ?? 0) / 100
+                )
+                return Position(bookFileID: bookFileID, location: .audiobook(location), recordedAt: recordedAt)
             }
         }
     }

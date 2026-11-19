@@ -4,16 +4,19 @@ import Foundation
 public struct Position: Codable, Sendable, Equatable {
     public enum Location: Codable, Sendable, Equatable {
         case epub(EPUBLocation)
+        case audiobook(AudiobookLocation)
 
         public var format: Format {
             switch self {
             case .epub: .epub
+            case .audiobook: .audiobook
             }
         }
     }
 
     public enum Format: Sendable {
         case epub
+        case audiobook
     }
 
     public var bookFileID: Int
@@ -47,5 +50,20 @@ public struct EPUBLocation: Codable, Sendable, Equatable {
         self.bookProgress = bookProgress
         self.cfi = cfi
         self.readerState = readerState
+    }
+}
+
+/// A time in an audiobook: a Track and the milliseconds into it. A single-file audiobook is Track 0.
+public struct AudiobookLocation: Codable, Sendable, Equatable {
+    public var trackIndex: Int
+    /// Milliseconds into the Track.
+    public var milliseconds: Int
+    /// 0…1 through the whole Book file.
+    public var bookProgress: Double
+
+    public init(trackIndex: Int, milliseconds: Int, bookProgress: Double) {
+        self.trackIndex = trackIndex
+        self.milliseconds = milliseconds
+        self.bookProgress = bookProgress
     }
 }

@@ -40,6 +40,9 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         TARGETED_DEVICE_FAMILY: "1,2"
+        # Merged with the generated keys; holds what has no INFOPLIST_KEY_ setting, like the
+        # audio background mode that keeps audiobooks playing on the lock screen.
+        INFOPLIST_FILE: App/Info.plist
         # No NSAppTransportSecurity exceptions: HTTPS only (spec #1).
   DogearTests:
     type: bundle.unit-test

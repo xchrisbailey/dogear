@@ -5,7 +5,7 @@ extension FakeGrimmory {
     struct ShelvedBook: Sendable {
         /// A `book-detail-*` fixture; the list endpoint serves the same object as the summary.
         var detail: String
-        /// An `audiobook-info-*` fixture, for Books with a folder audiobook.
+        /// An `audiobook-info-*` fixture, for Books with an audiobook.
         var audiobookInfo: String?
         /// Applied to both fixtures, to vary a real response (e.g. a different file extension).
         var replacing: [String: String] = [:]
@@ -15,7 +15,7 @@ extension FakeGrimmory {
     }
 
     static let atomicHabits = ShelvedBook(detail: "book-detail-epub")
-    static let projectHailMary = ShelvedBook(detail: "book-detail-audiobook-single")
+    static let projectHailMary = ShelvedBook(detail: "book-detail-audiobook-single", audiobookInfo: "audiobook-info-single")
     static let slaughterhouseFive = ShelvedBook(detail: "book-detail-audiobook-folder", audiobookInfo: "audiobook-info-folder")
     static let allSystemsRed = ShelvedBook(detail: "book-detail-azw3")
     static let mobyDick = ShelvedBook(detail: "book-detail-multi-file")

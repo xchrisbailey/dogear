@@ -35,9 +35,9 @@ struct LibraryView: View {
             .pickerStyle(.segmented)
             .listRowSeparator(.hidden)
             ForEach(books) { book in
-                if let epub = book.files.first(where: { $0.format == .epub && $0.isSupported }) {
+                if let file = Self.openable(book) {
                     Button {
-                        Task { await open(epub, of: book) }
+                        Task { await open(file, of: book) }
                     } label: {
                         BookRow(book: book, library: library)
                     }
@@ -57,7 +57,12 @@ struct LibraryView: View {
             }
         }
         .fullScreenCover(item: $reading) { open in
-            EPUBReaderView(title: open.title, model: open.reader)
+            switch open.content {
+            case let .epub(reader):
+                EPUBReaderView(title: open.title, model: reader)
+            case let .audiobook(player, cover):
+                AudiobookPlayerView(model: player, cover: cover, library: library)
+            }
         }
         .refreshable { await refresh() }
         .task(id: canSync) {
@@ -88,15 +93,32 @@ struct LibraryView: View {
         books = await library.books(in: scope, matching: search, showing: kind)
     }
 
+    /// The Book file a tap opens: the primary one when Dogear can open it, otherwise the first that it can.
+    private static func openable(_ book: Book) -> BookFile? {
+        let files = book.files.filter { $0.isSupported && [.epub, .audiobook].contains($0.format) }
+        return files.first { $0.id == book.primaryFileID } ?? files.first
+    }
+
     private func open(_ file: BookFile, of book: Book) async {
-        guard let reader = await model.epubReader(for: book, file: file) else { return }
-        reading = OpenBookFile(title: book.title, reader: reader)
+        switch file.format {
+        case .audiobook:
+            guard let player = await model.audiobookPlayer(for: book) else { return }
+            reading = OpenBookFile(title: book.title, content: .audiobook(player, cover: book.audiobookCover ?? book.cover))
+        default:
+            guard let reader = await model.epubReader(for: book, file: file) else { return }
+            reading = OpenBookFile(title: book.title, content: .epub(reader))
+        }
     }
 
     private struct OpenBookFile: Identifiable {
+        enum Content {
+            case epub(EPUBReaderModel)
+            case audiobook(AudiobookPlayerModel, cover: Cover?)
+        }
+
         let id = UUID()
         let title: String
-        let reader: EPUBReaderModel
+        let content: Content
     }
 
     private func refresh() async {

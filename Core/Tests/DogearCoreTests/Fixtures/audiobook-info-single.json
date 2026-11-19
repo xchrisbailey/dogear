@@ -1,0 +1,45 @@
+{
+  "bookId": 5,
+  "bookFileId": 5,
+  "title": "Project Hail Mary",
+  "author": "Andy Weir",
+  "narrator": "Ray Porter",
+  "durationMs": 58253000,
+  "bitrate": 125,
+  "codec": "AAC",
+  "sampleRate": 44100,
+  "channels": 2,
+  "totalSizeBytes": 924597248,
+  "folderBased": false,
+  "chapters": [
+    {
+      "index": 0,
+      "title": "001",
+      "startTimeMs": 0,
+      "endTimeMs": 2224936,
+      "durationMs": 2224936
+    },
+    {
+      "index": 1,
+      "title": "002",
+      "startTimeMs": 2224936,
+      "endTimeMs": 3946417,
+      "durationMs": 1721481
+    },
+    {
+      "index": 2,
+      "title": "003",
+      "startTimeMs": 3946417,
+      "endTimeMs": 6187630,
+      "durationMs": 2241213
+    },
+    {
+      "index": 29,
+      "title": "030",
+      "startTimeMs": 57371538,
+      "endTimeMs": 58253084,
+      "durationMs": 881546
+    }
+  ],
+  "tracks": null
+}
