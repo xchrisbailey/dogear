@@ -8,7 +8,7 @@ public struct LibraryStore: Sendable {
     public init(url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         container = try ModelContainer(
-            for: CachedBook.self, CachedCover.self,
+            for: CachedBook.self, CachedCover.self, CachedNavigation.self,
             configurations: ModelConfiguration(url: url)
         )
     }
@@ -34,6 +34,15 @@ public struct LibraryStore: Sendable {
     }
 }
 
+/// A single row: the libraries and shelves from the last refresh.
+@Model final class CachedNavigation {
+    var payload: Data
+
+    init(payload: Data) {
+        self.payload = payload
+    }
+}
+
 @Model final class CachedCover {
     @Attribute(.unique) var key: String
     @Attribute(.externalStorage) var image: Data
@@ -50,12 +59,19 @@ public struct LibraryStore: Sendable {
         return cached.compactMap { try? JSONDecoder().decode(Book.self, from: $0.payload) }
     }
 
-    /// Replaces the whole list, so Books removed on the Server disappear here too.
-    func replaceBooks(with books: [Book]) throws {
+    func navigation() -> Navigation {
+        let cached = (try? modelContext.fetch(FetchDescriptor<CachedNavigation>()))?.first
+        return cached.flatMap { try? JSONDecoder().decode(Navigation.self, from: $0.payload) } ?? Navigation()
+    }
+
+    /// Replaces everything, so Books, libraries and shelves removed on the Server disappear here too.
+    func replace(books: [Book], navigation: Navigation) throws {
         try modelContext.delete(model: CachedBook.self)
+        try modelContext.delete(model: CachedNavigation.self)
         for (order, book) in books.enumerated() {
             modelContext.insert(CachedBook(id: book.id, order: order, payload: try JSONEncoder().encode(book)))
         }
+        modelContext.insert(CachedNavigation(payload: try JSONEncoder().encode(navigation)))
         try modelContext.save()
     }
 
@@ -74,6 +90,7 @@ public struct LibraryStore: Sendable {
     func clear() throws {
         try modelContext.delete(model: CachedBook.self)
         try modelContext.delete(model: CachedCover.self)
+        try modelContext.delete(model: CachedNavigation.self)
         try modelContext.save()
     }
 

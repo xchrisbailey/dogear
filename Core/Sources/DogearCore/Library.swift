@@ -15,12 +15,35 @@ public actor Library {
         await cache.books()
     }
 
-    /// Fetches the latest Books and replaces the cached list. On failure the cache is left as it was.
+    /// Fetches the latest Books, libraries and shelves and replaces the cached copy. On failure the cache is left as it was.
     public func refresh() async throws(RequestError) -> [Book] {
-        let books = try await client().books()
+        let client = await client()
+        let libraries = try await client.libraries()
+        let shelves = try await client.shelves()
+        var books = try await client.books()
+        for index in books.indices {
+            books[index].shelfIDs = shelves.filter { $0.bookIDs.contains(books[index].id) }.map(\.shelf.id)
+        }
+        let navigation = Navigation(libraries: libraries, shelves: shelves.map(\.shelf))
         // A failed save only costs the offline copy; the fresh list is still worth showing.
-        try? await cache.replaceBooks(with: books)
+        try? await cache.replace(books: books, navigation: navigation)
         return books
+    }
+
+    /// The Grimmory libraries and shelves from the last successful refresh.
+    public func navigation() async -> Navigation {
+        await cache.navigation()
+    }
+
+    /// The cached Books in `scope` whose title or authors match every word of `search`,
+    /// so browsing and searching work the same offline.
+    public func books(
+        in scope: BookScope = .everything, matching search: String = "", showing kind: BookKind = .all
+    ) async -> [Book] {
+        let words = search.split(whereSeparator: \.isWhitespace)
+        return await cache.books().filter { book in
+            scope.contains(book) && kind.contains(book) && words.allSatisfy { book.matches(String($0)) }
+        }
     }
 
     /// The cover image, from the cache when it's there, otherwise fetched and cached. nil when unavailable.
@@ -53,6 +76,31 @@ private struct LibraryClient {
         var hasNext: Bool
     }
 
+    private struct LibrarySummary: Decodable {
+        var id: Int
+        var name: String
+    }
+
+    /// The web endpoint, because the app one answers 500 to readers who aren't admins.
+    func libraries() async throws(RequestError) -> [ServerLibrary] {
+        try await get([LibrarySummary].self, "libraries").map { ServerLibrary(id: $0.id, name: $0.name) }
+    }
+
+    private struct ShelfSummary: Decodable {
+        var id: Int
+        var name: String
+    }
+
+    /// Each shelf with its Books, from the shelf-filtered list, which is verified live; the shelves in Book details aren't.
+    func shelves() async throws(RequestError) -> [(shelf: Shelf, bookIDs: Set<Int>)] {
+        var shelves: [(shelf: Shelf, bookIDs: Set<Int>)] = []
+        for summary in try await get([ShelfSummary].self, "app/shelves") {
+            let ids = try await bookIDs(query: ["shelfId": "\(summary.id)"])
+            shelves.append((Shelf(id: summary.id, name: summary.name), Set(ids)))
+        }
+        return shelves
+    }
+
     private struct Detail: Decodable {
         struct File: Decodable {
             var id: Int
@@ -66,6 +114,7 @@ private struct LibraryClient {
 
         var id: Int
         var title: String?
+        var libraryId: Int?
         var authors: [String]?
         var files: [File]?
         var coverUpdatedOn: String?
@@ -81,15 +130,20 @@ private struct LibraryClient {
     private static let concurrentDetails = 6
 
     func books() async throws(RequestError) -> [Book] {
+        try await details(of: try await bookIDs(query: [:]))
+    }
+
+    private func bookIDs(query: [String: String]) async throws(RequestError) -> [Int] {
         var ids: [Int] = []
         var page = 0
         while true {
-            let result = try await get(Page.self, "app/books", query: ["page": "\(page)", "size": "\(Self.pageSize)"])
+            let paging = ["page": "\(page)", "size": "\(Self.pageSize)"]
+            let result = try await get(Page.self, "app/books", query: query.merging(paging) { _, paging in paging })
             ids += result.content.map(\.id)
             guard result.hasNext else { break }
             page += 1
         }
-        return try await details(of: ids)
+        return ids
     }
 
     /// The list only names each Book's primary file, so each Book's detail is fetched for its Book files.
@@ -127,7 +181,8 @@ private struct LibraryClient {
             files: files,
             primaryFileID: detail.files?.first { $0.primary == true }?.id,
             ebookCover: detail.coverUpdatedOn.map { Cover(bookID: id, kind: .ebook, updatedOn: $0) },
-            audiobookCover: detail.audiobookCoverUpdatedOn.map { Cover(bookID: id, kind: .audiobook, updatedOn: $0) }
+            audiobookCover: detail.audiobookCoverUpdatedOn.map { Cover(bookID: id, kind: .audiobook, updatedOn: $0) },
+            libraryID: detail.libraryId
         )
     }
 

@@ -44,6 +44,7 @@ final class FakeGrimmory: Sendable {
         var invalid: Set<String> = []
         var requests: [Request] = []
         var library: [ShelvedBook] = []
+        var shelves: [Shelf] = []
     }
 
     let state: Mutex<State>
