@@ -17,9 +17,12 @@ final class AppModel {
     private let account: Account
     private(set) var session: Session?
     private(set) var hasRestored = false
+    /// nil only if the on-device store can't be opened; the library then can't be shown.
+    let library: Library?
 
     init(account: Account) {
         self.account = account
+        library = (try? LibraryStore.onDevice()).map { Library(account: account, store: $0) }
     }
 
     /// Follows the Session for the app's lifetime, so a refused refresh anywhere shows up here.
@@ -41,6 +44,7 @@ final class AppModel {
 
     func signOut() async {
         await account.signOut()
+        await library?.forget()
         session = nil
     }
 }
@@ -51,7 +55,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if let session = model.session {
-                HomeView(session: session)
+                HomeView(session: session, library: model.library)
                     .safeAreaInset(edge: .top, spacing: 0) {
                         if session.needsSignIn { NeedsSignInBanner(session: session) }
                     }

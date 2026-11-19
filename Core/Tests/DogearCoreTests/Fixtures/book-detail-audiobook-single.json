@@ -1,0 +1,37 @@
+{
+  "id": 5,
+  "title": "Project Hail Mary",
+  "authors": [
+    "Andy Weir"
+  ],
+  "thumbnailUrl": "/api/books/5/cover",
+  "libraryId": 1,
+  "addedOn": "2026-11-06T07:54:47Z",
+  "categories": [
+    "Audiobook"
+  ],
+  "publishedDate": "2021-01-01",
+  "language": "en",
+  "libraryName": "Audiobooks",
+  "shelves": [],
+  "primaryFileType": "AUDIOBOOK",
+  "fileTypes": [
+    "AUDIOBOOK"
+  ],
+  "files": [
+    {
+      "id": 5,
+      "bookId": 5,
+      "fileName": "Project Hail Mary.m4b",
+      "folderBased": false,
+      "bookType": "AUDIOBOOK",
+      "fileSizeKb": 902927,
+      "extension": "m4b",
+      "addedOn": "2026-11-06T07:54:47Z",
+      "book": true,
+      "primary": true
+    }
+  ],
+  "audiobookCoverUpdatedOn": "2026-11-06T07:54:48Z",
+  "isPhysical": false
+}

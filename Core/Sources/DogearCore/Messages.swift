@@ -35,3 +35,35 @@ extension VersionWarning {
         }
     }
 }
+
+extension RequestError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .signedOut:
+            "You're signed out."
+        case .needsSignIn:
+            "Your sign-in has expired. Sign in again to sync."
+        case .unreachable:
+            "Can't reach your Server. Showing your saved library."
+        case .rateLimited:
+            "Your Server is turning away requests for now. Try again in a few minutes."
+        case .serverChanged:
+            "The Server's responses have changed shape. Update Dogear."
+        }
+    }
+}
+
+extension BookFile.Format {
+    public var name: String {
+        switch self {
+        case .epub: "EPUB"
+        case .pdf: "PDF"
+        case .audiobook: "Audiobook"
+        case .mobi: "MOBI"
+        case .azw3: "AZW3"
+        case .fb2: "FB2"
+        case .comic: "Comic"
+        case .other: "Other"
+        }
+    }
+}

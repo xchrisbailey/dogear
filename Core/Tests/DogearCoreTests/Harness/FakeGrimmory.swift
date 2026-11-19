@@ -24,6 +24,7 @@ final class FakeGrimmory: Sendable {
         var path: String
         var headers: [String: String]
         var json: [String: any Sendable]?
+        var query: [String: String] = [:]
     }
 
     struct Tokens: Sendable, Equatable {
@@ -34,7 +35,7 @@ final class FakeGrimmory: Sendable {
     static let address = "https://grimmory.example"
     static let reader = Account(username: "reader", password: "correct horse")
 
-    private struct State {
+    struct State {
         var kind: Kind
         var version: String
         var accounts: [Account]
@@ -42,9 +43,10 @@ final class FakeGrimmory: Sendable {
         /// Access tokens past their lifetime, and refresh tokens rotated away or revoked.
         var invalid: Set<String> = []
         var requests: [Request] = []
+        var library: [ShelvedBook] = []
     }
 
-    private let state: Mutex<State>
+    let state: Mutex<State>
 
     init(kind: Kind = .grimmory, version: String = "v3.5.0", accounts: [Account] = [FakeGrimmory.reader]) {
         state = Mutex(State(kind: kind, version: version, accounts: accounts))
@@ -78,7 +80,8 @@ final class FakeGrimmory: Sendable {
                 method: request.httpMethod ?? "GET",
                 path: request.url?.path ?? "",
                 headers: request.allHTTPHeaderFields ?? [:],
-                json: body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: any Sendable] }
+                json: body.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: any Sendable] },
+                query: Self.query(of: request)
             )
             state.requests.append(recorded)
 
@@ -102,9 +105,14 @@ final class FakeGrimmory: Sendable {
                 return Self.fixture("version", replacing: ["v3.5.0": state.version])
             default:
                 // Grimmory answers unknown paths with its web app, not a 404.
-                return Self.spaPage
+                return Self.library(recorded, state: state) ?? Self.spaPage
             }
         }
+    }
+
+    private static func query(of request: URLRequest) -> [String: String] {
+        let items = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
+        return Dictionary(items.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { _, last in last })
     }
 
     private static func login(_ json: [String: any Sendable]?, state: inout State) -> FakeServer.Reply {
@@ -137,13 +145,13 @@ final class FakeGrimmory: Sendable {
         return tokens
     }
 
-    private static func isAuthorized(_ request: Request, state: State) -> Bool {
+    static func isAuthorized(_ request: Request, state: State) -> Bool {
         guard let header = request.headers["Authorization"], header.hasPrefix("Bearer ") else { return false }
         let token = String(header.dropFirst("Bearer ".count))
         return state.issued.contains { $0.access == token } && !state.invalid.contains(token)
     }
 
-    private static let spaPage = FakeServer.Reply.response(
+    static let spaPage = FakeServer.Reply.response(
         status: 200, body: Data("<!doctype html><html><body>app</body></html>".utf8), contentType: "text/html"
     )
 
