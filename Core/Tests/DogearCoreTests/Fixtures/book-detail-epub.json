@@ -1,0 +1,40 @@
+{
+  "id": 4,
+  "title": "Atomic Habits: Tiny Changes, Remarkable Results",
+  "authors": [
+    "James Clear"
+  ],
+  "thumbnailUrl": "/api/books/4/cover",
+  "readStatus": "READING",
+  "libraryId": 2,
+  "addedOn": "2026-11-06T07:23:47Z",
+  "lastReadTime": "2026-11-19T15:34:09Z",
+  "subtitle": "An Easy & Proven Way to Build Good Habits & Break Bad Ones",
+  "categories": [],
+  "publisher": "Penguin Publishing Group",
+  "publishedDate": "2018-10-16",
+  "language": "en-US",
+  "libraryName": "Ebook",
+  "shelves": [],
+  "readProgress": 28.1341,
+  "primaryFileType": "EPUB",
+  "fileTypes": [
+    "EPUB"
+  ],
+  "files": [
+    {
+      "id": 4,
+      "bookId": 4,
+      "fileName": "Atomic Habits - James Clear.epub",
+      "folderBased": false,
+      "bookType": "EPUB",
+      "fileSizeKb": 4641,
+      "extension": "epub",
+      "addedOn": "2026-11-06T07:23:47Z",
+      "book": true,
+      "primary": true
+    }
+  ],
+  "coverUpdatedOn": "2026-11-06T07:23:47Z",
+  "isPhysical": false
+}

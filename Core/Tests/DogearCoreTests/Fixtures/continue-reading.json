@@ -1,0 +1,29 @@
+[
+  {
+    "id": 4,
+    "title": "Atomic Habits: Tiny Changes, Remarkable Results",
+    "authors": [
+      "James Clear"
+    ],
+    "thumbnailUrl": "/api/books/4/cover",
+    "readStatus": "READING",
+    "libraryId": 2,
+    "addedOn": "2026-11-06T07:23:47Z",
+    "lastReadTime": "2026-11-19T15:34:09Z",
+    "readProgress": 28.1341,
+    "primaryFileId": 4,
+    "primaryFileType": "EPUB",
+    "primaryFileName": "Atomic Habits - James Clear.epub",
+    "coverUpdatedOn": "2026-11-06T07:23:47Z",
+    "isPhysical": false,
+    "publisher": "Penguin Publishing Group",
+    "categories": [],
+    "tags": [],
+    "moods": [],
+    "language": "en-US",
+    "publishedDate": "2018-10-16",
+    "metadataMatchScore": 49.4624,
+    "fileSizeKb": 4641,
+    "allMetadataLocked": false
+  }
+]

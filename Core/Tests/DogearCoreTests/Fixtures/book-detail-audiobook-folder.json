@@ -1,0 +1,50 @@
+{
+  "id": 6,
+  "title": "Slaughterhouse-Five",
+  "authors": [
+    "Kurt Vonnegut Jr."
+  ],
+  "thumbnailUrl": "/api/books/6/cover",
+  "seriesNumber": 1.0,
+  "libraryId": 1,
+  "addedOn": "2026-11-07T06:00:05Z",
+  "categories": [
+    "Classics",
+    "Literature",
+    "Historical Fiction",
+    "Fantasy",
+    "Book Club",
+    "War",
+    "Novels",
+    "Time Travel",
+    "Fiction",
+    "Science Fiction"
+  ],
+  "publisher": "Dial Press",
+  "publishedDate": "1999-01-12",
+  "pageCount": 275,
+  "language": "en",
+  "goodreadsRating": 4.1,
+  "goodreadsReviewCount": 1538504,
+  "libraryName": "Audiobooks",
+  "shelves": [],
+  "primaryFileType": "AUDIOBOOK",
+  "fileTypes": [
+    "AUDIOBOOK"
+  ],
+  "files": [
+    {
+      "id": 6,
+      "bookId": 6,
+      "fileName": "Slaughterhouse-Five (1956)",
+      "folderBased": true,
+      "bookType": "AUDIOBOOK",
+      "fileSizeKb": 170240,
+      "addedOn": "2026-11-07T06:00:05Z",
+      "book": true,
+      "primary": true
+    }
+  ],
+  "audiobookCoverUpdatedOn": "2026-11-19T15:28:48Z",
+  "isPhysical": false
+}

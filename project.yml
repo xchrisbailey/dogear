@@ -1,0 +1,74 @@
+name: Dogear
+options:
+  bundleIdPrefix: com.xchrisbailey
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    # The Keychain refuses apps signed without entitlements, so simulator builds are signed
+    # ad hoc (per target below, where XcodeGen's preset would override it) and need no team.
+    # Device builds sign automatically with the team passed as DEVELOPMENT_TEAM or picked in Xcode.
+    CODE_SIGN_STYLE: Automatic
+packages:
+  Readium:
+    url: https://github.com/readium/swift-toolkit
+    exactVersion: 3.11.1
+  DogearCore:
+    path: Core
+targets:
+  Dogear:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes: ["Reader/Resources/**"]
+      # The CFI bridge's scripts, loaded from the app bundle as WKUserScripts.
+      - path: App/Reader/Resources
+        buildPhase: resources
+    dependencies:
+      - package: DogearCore
+      - {package: Readium, product: ReadiumShared}
+      - {package: Readium, product: ReadiumStreamer}
+      - {package: Readium, product: ReadiumNavigator}
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Dogear
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # Merged with the generated keys; holds what has no INFOPLIST_KEY_ setting, like the
+        # audio background mode that keeps audiobooks playing on the lock screen.
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/Dogear.entitlements
+        "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": "-"
+        # No NSAppTransportSecurity exceptions: HTTPS only (spec #1).
+  DogearTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: AppTests
+        excludes: ["Fixtures/**"]
+      - path: AppTests/Fixtures/LighthouseLedger
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - target: Dogear
+      - {package: Readium, product: ReadiumShared}
+      - {package: Readium, product: ReadiumStreamer}
+      - {package: Readium, product: ReadiumNavigator}
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": "-"
+schemes:
+  Dogear:
+    build:
+      targets: {Dogear: all, DogearTests: [test]}
+    test:
+      targets: [DogearTests]

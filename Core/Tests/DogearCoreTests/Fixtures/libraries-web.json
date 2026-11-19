@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1,
+    "name": "Audiobooks",
+    "icon": "headphones",
+    "iconType": "LUCIDE",
+    "watch": true,
+    "paths": [
+      {
+        "id": 1,
+        "path": "/books/audiobooks"
+      }
+    ],
+    "formatPriority": [
+      "EPUB",
+      "PDF",
+      "CBX",
+      "MOBI",
+      "AZW3",
+      "FB2",
+      "AUDIOBOOK"
+    ],
+    "allowedFormats": [],
+    "organizationMode": "BOOK_PER_FILE",
+    "metadataSource": "EMBEDDED"
+  },
+  {
+    "id": 2,
+    "name": "Ebook",
+    "icon": "book-open-check",
+    "iconType": "LUCIDE",
+    "watch": true,
+    "paths": [
+      {
+        "id": 2,
+        "path": "/books/ebooks"
+      }
+    ],
+    "formatPriority": [
+      "EPUB",
+      "PDF",
+      "CBX",
+      "MOBI",
+      "AZW3",
+      "FB2",
+      "AUDIOBOOK"
+    ],
+    "allowedFormats": [],
+    "organizationMode": "BOOK_PER_FILE",
+    "metadataSource": "EMBEDDED"
+  }
+]
