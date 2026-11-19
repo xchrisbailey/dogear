@@ -16,10 +16,9 @@ struct ReadEPUBTests {
 
     /// Fetches `entry` the way the reader's HTTP client does: authorize, send, and on a 401 reauthorize once.
     func fetch(_ entry: String, from epub: ServerEPUB) async throws -> (status: Int, body: Data) {
-        let request = URLRequest(url: epub.baseURL.appending(path: entry))
-        var (data, response) = try await server.session.data(for: try await epub.authorize(request))
+        let sent = try await epub.authorize(URLRequest(url: epub.baseURL.appending(path: entry)))
+        var (data, response) = try await server.session.data(for: sent)
         if (response as? HTTPURLResponse)?.statusCode == 401 {
-            let sent = try await epub.authorize(request)
             (data, response) = try await server.session.data(for: try await epub.reauthorize(afterRejecting: sent))
         }
         return ((response as? HTTPURLResponse)?.statusCode ?? 0, data)
@@ -52,6 +51,19 @@ struct ReadEPUBTests {
         }
 
         #expect(results == [200, 200, 200])
+        #expect(server.requests.filter { $0.path == "/api/v1/auth/refresh" }.count == 1)
+    }
+
+    @Test func rejectionArrivingAfterAnotherRequestRefreshedDoesntRefreshAgain() async throws {
+        let account = try await signedIn()
+        let epub = try #require(await ServerEPUB(account: account, bookID: 4))
+        let late = try await epub.authorize(URLRequest(url: epub.baseURL.appending(path: "OEBPS/toc.xhtml")))
+        server.expireAccessTokens()
+        _ = try await fetch("OEBPS/content.opf", from: epub)
+
+        let (_, response) = try await server.session.data(for: try await epub.reauthorize(afterRejecting: late))
+
+        #expect((response as? HTTPURLResponse)?.statusCode == 200)
         #expect(server.requests.filter { $0.path == "/api/v1/auth/refresh" }.count == 1)
     }
 
