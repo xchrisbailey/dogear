@@ -36,6 +36,7 @@ struct EPUBReaderView: View {
                         .presentationDetents([.medium, .large])
                 }
                 .task { await model.open() }
+                .onDisappear { Task { await model.close() } }
         }
     }
 

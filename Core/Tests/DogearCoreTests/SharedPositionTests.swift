@@ -47,7 +47,7 @@ struct SharedPositionTests {
         let shared = try await signedIn()
         server.holdSharedPosition(bookID: 4, fixture: "app-progress-epub")
 
-        let position = try #require(try await shared.latest(bookID: 4, bookFileID: 4))
+        let position = try #require(try await shared.latest(.epub, bookID: 4, bookFileID: 4))
 
         #expect(position.bookFileID == 4)
         #expect(position.recordedAt == ISO8601DateFormatter().date(from: "2026-11-19T15:34:09Z"))
@@ -64,6 +64,6 @@ struct SharedPositionTests {
         let shared = try await signedIn()
         server.holdSharedPosition(bookID: 4, fixture: "app-progress-empty")
 
-        #expect(try await shared.latest(bookID: 4, bookFileID: 4) == nil)
+        #expect(try await shared.latest(.epub, bookID: 4, bookFileID: 4) == nil)
     }
 }

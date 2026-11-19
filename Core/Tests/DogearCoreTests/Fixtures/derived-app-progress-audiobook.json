@@ -1,0 +1,10 @@
+{
+  "readStatus": "READING",
+  "lastReadTime": "2026-11-19T15:40:00Z",
+  "audiobookProgress": {
+    "positionMs": 60000,
+    "trackIndex": 2,
+    "percentage": 3.6,
+    "updatedAt": "2026-11-19T15:40:00Z"
+  }
+}

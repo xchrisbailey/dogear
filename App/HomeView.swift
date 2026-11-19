@@ -41,7 +41,10 @@ struct HomeView: View {
                         )
                     }
                 }
-                .toolbar { SignOutButton() }
+                .toolbar {
+                    OutboxIndicator()
+                    SignOutButton()
+                }
             }
         }
     }
