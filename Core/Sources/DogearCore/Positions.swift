@@ -8,6 +8,7 @@ public actor Positions {
     private let clock: any WallClock
     private var flushing: Task<Result<Void, RequestError>, Never>?
     private var observers: [UUID: AsyncStream<Int>.Continuation] = [:]
+    private var changeObservers: [UUID: AsyncStream<Void>.Continuation] = [:]
 
     public init(store: PositionStore, clock: any WallClock = SystemClock()) {
         cache = PositionCache(modelContainer: store.container)
@@ -21,6 +22,7 @@ public actor Positions {
         let position = Position(bookFileID: bookFileID, location: location, recordedAt: clock.now())
         try await cache.save(position, outboxBookID: bookID)
         await announceOutboxCount()
+        announceChange()
         return position
     }
 
@@ -30,11 +32,34 @@ public actor Positions {
     public func recordLanding(_ location: Position.Location, bookFileID: Int) async throws -> Position {
         let position = Position(bookFileID: bookFileID, location: location, recordedAt: clock.now())
         try await cache.save(position, outboxBookID: nil)
+        announceChange()
         return position
     }
 
     public func latest(bookFileID: Int) async -> Position? {
         await cache.position(bookFileID: bookFileID)
+    }
+
+    /// The latest Position in every Book file read on this device.
+    public func all() async -> [Position] {
+        await cache.positions()
+    }
+
+    /// Yields whenever a Position is recorded, adopted from the Server or forgotten.
+    public func changes() -> AsyncStream<Void> {
+        let (stream, continuation) = AsyncStream<Void>.makeStream()
+        let id = UUID()
+        changeObservers[id] = continuation
+        continuation.onTermination = { _ in Task { await self.removeChangeObserver(id) } }
+        return stream
+    }
+
+    private func removeChangeObserver(_ id: UUID) {
+        changeObservers[id] = nil
+    }
+
+    private func announceChange() {
+        for observer in changeObservers.values { observer.yield() }
     }
 
     /// How many Positions are waiting for the Server.
@@ -97,6 +122,7 @@ public actor Positions {
                    newer.recordedAt > position.recordedAt {
                     // A Stale entry (ADR 0002): newer reading happened elsewhere, so that's where the reader is.
                     try? await cache.adopt(newer, replacing: position)
+                    announceChange()
                     continue
                 }
                 try await shared.push(position, bookID: entry.bookID)
@@ -113,6 +139,7 @@ public actor Positions {
     public func forget() async {
         try? await cache.clear()
         await announceOutboxCount()
+        announceChange()
     }
 }
 
@@ -169,6 +196,12 @@ struct WaitingPosition: Sendable {
     func position(bookFileID: Int) -> Position? {
         guard let stored = stored(bookFileID) else { return nil }
         return try? JSONDecoder().decode(Position.self, from: stored.payload)
+    }
+
+    func positions() -> [Position] {
+        ((try? modelContext.fetch(FetchDescriptor<StoredPosition>())) ?? []).compactMap {
+            try? JSONDecoder().decode(Position.self, from: $0.payload)
+        }
     }
 
     /// Saves the latest Position and, with `outboxBookID`, its Outbox entry in one transaction,
