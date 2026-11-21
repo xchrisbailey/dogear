@@ -7,6 +7,8 @@
 - `AppTests/`: seam 2, the CFI bridge on a real Readium navigator with a fixture EPUB (`AppTests/Fixtures/LighthouseLedger`, self-written, CC0). Same as the build command with `test` instead of `build`.
 - Packages: `Dogear.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` is the only committed file under the generated project (XcodeGen keeps it). Commit it whenever a package in `project.yml` changes.
 
+- TestFlight: `ASC_KEY_ID=… ASC_ISSUER_ID=… scripts/testflight.sh` archives and uploads with cloud-managed signing. The App Store Connect API key (Admin) lives at `~/.appstoreconnect/private_keys/AuthKey_<id>.p8`, never in the repo.
+
 ## Agent skills
 
 ### Issue tracker

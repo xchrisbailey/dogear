@@ -11,8 +11,12 @@ settings:
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     # The Keychain refuses apps signed without entitlements, so simulator builds are signed
     # ad hoc (per target below, where XcodeGen's preset would override it) and need no team.
-    # Device builds sign automatically with the team passed as DEVELOPMENT_TEAM or picked in Xcode.
+    # Device and archive builds sign automatically with this team.
     CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: 5U2B7W5F39
+    MARKETING_VERSION: "0.1.0"
+    # scripts/testflight.sh overrides this per upload; TestFlight needs it to increase.
+    CURRENT_PROJECT_VERSION: "1"
 packages:
   Readium:
     url: https://github.com/readium/swift-toolkit
