@@ -61,7 +61,7 @@ final class AudiobookPlayerModel {
     static let skipBack: Duration = .seconds(15)
     static let skipForward: Duration = .seconds(30)
     private static let speedKey = "playbackSpeed"
-    private static let log = Logger(subsystem: "com.xchrisbailey.Dogear", category: "Player")
+    private static let log = Logger(subsystem: "computer.srcery.dogear", category: "Player")
 
     init(
         audiobook: any AudiobookSource, title: String, author: String?,

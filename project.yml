@@ -1,6 +1,6 @@
 name: Dogear
 options:
-  bundleIdPrefix: com.xchrisbailey
+  bundleIdPrefix: computer.srcery
   deploymentTarget:
     iOS: "26.0"
 settings:
@@ -43,6 +43,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        PRODUCT_BUNDLE_IDENTIFIER: computer.srcery.dogear
         INFOPLIST_KEY_CFBundleDisplayName: Dogear
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"

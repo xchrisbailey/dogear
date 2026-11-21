@@ -6,7 +6,7 @@ import UIKit
 /// Runs Downloads in a background URLSession, so they carry on after the reader leaves the app
 /// and survive iOS suspending or relaunching it. Each task's `taskDescription` is its transfer id.
 nonisolated final class BackgroundTransport: NSObject, DownloadTransport, URLSessionDownloadDelegate, Sendable {
-    static let identifier = "com.xchrisbailey.Dogear.downloads"
+    static let identifier = "computer.srcery.dogear.downloads"
 
     private let state = Mutex<(downloads: Downloads?, session: URLSession?)>((nil, nil))
 
