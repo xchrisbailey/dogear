@@ -29,6 +29,14 @@ jobs:
           sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
           echo "version=$(xcodebuild -version | tr -s '\n ' '-' | sed 's/-$//')" >> "$GITHUB_OUTPUT"
 
+      # A cold simulator boot takes one to eight minutes on these runners, so it starts now
+      # and runs behind the cache restore, seam 1 and the build instead of in front of them.
+      - name: Start booting the simulator
+        run: |
+          udid="$(scripts/with-simulator.sh create)"
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+          nohup xcrun simctl boot "$udid" >/dev/null 2>&1 &
+
       # Build products and package checkouts from the newest main run with the same Xcode
       # and packages. Main saves after every run; a PR saves only when nothing matched (new
       # Xcode or packages), so its own reruns are warm. PR caches are invisible to other PRs.
@@ -49,8 +57,6 @@ jobs:
         run: swift test --package-path Core
 
       - run: brew install xcodegen
-      - name: Resolve packages
-        run: scripts/app.sh resolve
       - name: Build and run seam 2 on a throwaway simulator
         shell: bash -eo pipefail {0}
         env:
