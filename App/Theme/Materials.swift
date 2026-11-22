@@ -155,19 +155,20 @@ struct DrawerButtonStyle: ButtonStyle {
             .lineLimit(1)
             .minimumScaleFactor(0.7)
             .frame(maxWidth: .infinity, minHeight: 44)
-            .background(
-                LinearGradient(
-                    colors: pressed ? [Theme.brass[1], Theme.brass[0]] : [Theme.brass[0], Theme.brass[2]],
-                    startPoint: .top, endPoint: .bottom
-                ),
-                in: .rect(cornerRadius: 4)
-            )
+            .background {
+                // The drop is the drawer front's own, so the lettering isn't doubled by it.
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(LinearGradient(
+                        colors: pressed ? [Theme.brass[1], Theme.brass[0]] : [Theme.brass[0], Theme.brass[2]],
+                        startPoint: .top, endPoint: .bottom
+                    ))
+                    .shadow(color: .black.opacity(pressed ? 0 : 0.5), radius: 0, y: pressed ? 0 : 3)
+            }
             .overlay {
                 if pressed {
                     RoundedRectangle(cornerRadius: 4).strokeBorder(.black.opacity(0.35), lineWidth: 1)
                 }
             }
-            .shadow(color: .black.opacity(pressed ? 0 : 0.5), radius: 0, y: pressed ? 0 : 3)
             .offset(y: pressed ? 3 : 0)
     }
 }

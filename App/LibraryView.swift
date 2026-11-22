@@ -145,6 +145,8 @@ struct LibraryView: View {
         }
         // The nameplate shows the name; the title stays for the sidebar's back button and VoiceOver.
         .navigationTitle(navigation.name(of: scope))
+        // Inline, or the large title would repeat the nameplate above it.
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
         .searchable(text: $search, prompt: "Title or author")
         .overlay {
