@@ -2,12 +2,18 @@ import Foundation
 
 /// How a Book stands on the Library's shelf: what its spine says and how big it is.
 ///
-/// Sizes are in points and come from the Book's id, so a shelf looks uneven like a real one but
-/// a Book never changes shape between launches or devices.
+/// Sizes are in points. A bigger ebook file makes a thicker spine, as more pages would; the
+/// height, and the thickness of a Book whose size isn't known, come from the Book's id. Either
+/// way a shelf looks uneven like a real one and a Book never changes shape between launches or
+/// devices.
 public struct Spine: Sendable, Equatable {
     public static let thicknesses: ClosedRange<Double> = 26 ... 46
     public static let heights: ClosedRange<Double> = 160 ... 196
     public static let fontSizes: ClosedRange<Double> = 12 ... 19
+    /// Ebook file sizes, in kilobytes, that span thinnest to thickest. A novel as an EPUB is a
+    /// few hundred kilobytes and an illustrated book or a PDF tens of megabytes, so thickness
+    /// follows the size's order of magnitude.
+    public static let fileSizes: ClosedRange<Double> = 150 ... 30000
 
     /// The Book's title as a spine has room for it.
     public var title: String
@@ -20,7 +26,7 @@ public struct Spine: Sendable, Equatable {
 
     public init(book: Book) {
         title = Self.title(for: book.title)
-        let thick = Self.fraction(of: book.id, salt: 1)
+        let thick = Self.thickness(ofFileSized: Self.ebookSize(of: book)) ?? Self.fraction(of: book.id, salt: 1)
         thickness = Self.thicknesses.lowerBound + (thick * (Self.thicknesses.upperBound - Self.thicknesses.lowerBound)).rounded()
         height = Self.heights.lowerBound
             + (Self.fraction(of: book.id, salt: 2) * (Self.heights.upperBound - Self.heights.lowerBound)).rounded()
@@ -45,6 +51,20 @@ public struct Spine: Sendable, Equatable {
             break
         }
         return short
+    }
+
+    /// The size of the Book's ebook file: the EPUB if it has one, since a PDF or Kindle file of
+    /// the same Book is bigger for reasons other than its length.
+    static func ebookSize(of book: Book) -> Int? {
+        let ebooks = book.files.filter { $0.format != .audiobook && ($0.sizeKB ?? 0) > 0 }
+        return (ebooks.first { $0.format == .epub } ?? ebooks.first)?.sizeKB
+    }
+
+    /// 0 for the thinnest spine to 1 for the thickest. nil when the size isn't known.
+    static func thickness(ofFileSized sizeKB: Int?) -> Double? {
+        guard let sizeKB, sizeKB > 0 else { return nil }
+        let span = log(fileSizes.upperBound) - log(fileSizes.lowerBound)
+        return min(max((log(Double(sizeKB)) - log(fileSizes.lowerBound)) / span, 0), 1)
     }
 
     /// 0…1, the same for a Book id on every launch (`Hasher` is seeded per process).

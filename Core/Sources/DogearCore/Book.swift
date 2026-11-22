@@ -73,11 +73,14 @@ public struct BookFile: Codable, Sendable, Equatable, Identifiable {
     public var format: Format
     /// False for formats Dogear can't open (MOBI, AZW, AZW3, FB2, comics, Opus audio).
     public var isSupported: Bool
+    /// The file's size on the Server, in kilobytes. nil for Books cached before sizes were kept.
+    public var sizeKB: Int?
 
-    public init(id: Int, format: Format, isSupported: Bool) {
+    public init(id: Int, format: Format, isSupported: Bool, sizeKB: Int? = nil) {
         self.id = id
         self.format = format
         self.isSupported = isSupported
+        self.sizeKB = sizeKB
     }
 }
 

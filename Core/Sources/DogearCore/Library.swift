@@ -139,6 +139,7 @@ private struct LibraryClient {
         struct File: Decodable {
             var id: Int
             var bookType: String?
+            var fileSizeKb: Int?
             var `extension`: String?
             var folderBased: Bool?
             /// false for supplementary files, which aren't readable.
@@ -226,7 +227,10 @@ private struct LibraryClient {
         var files: [BookFile] = []
         for file in detail.files ?? [] where file.book != false {
             let format = Self.format(of: file.bookType)
-            files.append(BookFile(id: file.id, format: format, isSupported: try await isSupported(file, format: format, bookID: id)))
+            files.append(BookFile(
+                id: file.id, format: format, isSupported: try await isSupported(file, format: format, bookID: id),
+                sizeKB: file.fileSizeKb
+            ))
         }
         return Book(
             id: detail.id,
