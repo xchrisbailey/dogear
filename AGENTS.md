@@ -3,8 +3,10 @@
 ## Layout and commands
 
 - `Core/`: UI-free Swift package (`DogearCore`). Seam 1 tests run against a fake Grimmory Server (`Core/Tests/DogearCoreTests/Harness/`) with fixtures from real v3.5.0 responses: `swift test --package-path Core`.
-- `App/`: SwiftUI app. `Dogear.xcodeproj` is generated from `project.yml` and not committed: `"$(readlink -f "$(command -v xcodegen)")" generate`, then `xcodebuild build -project Dogear.xcodeproj -scheme Dogear -destination "id=$UDID" -derivedDataPath .build/DD` on a simulator you created and delete afterwards. Simulator builds are signed ad hoc so the Keychain works (no team needed); device builds need `DEVELOPMENT_TEAM=<team id>` or a team picked in Xcode.
-- `AppTests/`: seam 2, the CFI bridge on a real Readium navigator with a fixture EPUB (`AppTests/Fixtures/LighthouseLedger`, self-written, CC0). Same as the build command with `test` instead of `build`.
+- `App/`: SwiftUI app. `Dogear.xcodeproj` is generated from `project.yml` and not committed. `scripts/app.sh build` generates it and builds on a throwaway simulator. Run anything else that needs a simulator through `scripts/with-simulator.sh <cmd>` (exports `$UDID`, always deletes the device); `scripts/with-simulator.sh status` checks for leftovers.
+- `AppTests/`: seam 2, the CFI bridge on a real Readium navigator with a fixture EPUB (`AppTests/Fixtures/LighthouseLedger`, self-written, CC0): `scripts/app.sh test`.
+- Guardrails: CI (`.github/workflows/ci.yml`) runs the secret scan, seam 1 and seam 2 on every PR. Enable the pre-commit secret scan once per clone with `git config core.hooksPath .githooks`; private patterns live outside the repo in `~/.config/dogear/secret-patterns`.
+- Grimmory API, Readium and AVFoundation behaviour (gotchas, endpoint shapes, upstream source paths): `docs/reference/`.
 - Packages: `Dogear.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` is the only committed file under the generated project (XcodeGen keeps it). Commit it whenever a package in `project.yml` changes.
 - TestFlight: `ASC_KEY_ID=… ASC_ISSUER_ID=… scripts/testflight.sh` archives and uploads with cloud-managed signing. The App Store Connect API key (Admin) lives at `~/.appstoreconnect/private_keys/AuthKey_<id>.p8`, never in the repo.
 
