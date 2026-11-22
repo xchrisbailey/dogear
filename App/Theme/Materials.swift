@@ -114,7 +114,7 @@ struct ShelfLedge: View {
     }
 }
 
-/// A handwritten card in a brass holder, naming a shelf.
+/// A stitched leather tag naming a shelf, lettered like the tabs above it but smaller and in capitals.
 struct ShelfLabel: View {
     let text: String
 
@@ -123,15 +123,26 @@ struct ShelfLabel: View {
     }
 
     var body: some View {
-        Text(text)
-            .font(Theme.label(.subheadline))
-            .foregroundStyle(Theme.ink)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 1)
-            .background(Theme.paper, in: .rect(cornerRadius: 2))
-            .padding(4)
-            .background(LinearGradient(colors: [Theme.brass[1], Theme.brass[2]], startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 3))
-            .shadow(color: .black.opacity(0.6), radius: 1, y: 1)
+        Text(text.uppercased())
+            .font(Theme.stamped(12))
+            .tracking(2)
+            .foregroundStyle(Theme.tabLettering)
+            .shadow(color: .black.opacity(0.5), radius: 0, y: -1)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
+            .background {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(LinearGradient(colors: Theme.tabLeather, startPoint: .top, endPoint: .bottom))
+                    .overlay(alignment: .top) { Color.white.opacity(0.1).frame(height: 1).clipShape(.rect(cornerRadius: 4)) }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 2)
+                    .strokeBorder(Theme.stitching.opacity(0.28), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                    .padding(3)
+                    .accessibilityHidden(true)
+            }
+            .shadow(color: .black.opacity(0.5), radius: 2, y: 2)
+            .accessibilityLabel(text)
             .accessibilityAddTraits(.isHeader)
     }
 }
