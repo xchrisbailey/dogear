@@ -25,7 +25,7 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     var preferences: EPUBPreferences {
         didSet {
             moves.relocated()
-            navigator?.submitPreferences(preferences)
+            navigator?.submitPreferences(preferences.onPaper)
             ReadingPreferences.save(preferences)
         }
     }
@@ -40,7 +40,6 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     // Readium holds its HTTP client delegate weakly; this keeps the signer alive with the client.
     private let httpClient: DefaultHTTPClient
     private var publication: Publication?
-    private let pageTurns = DirectionalNavigationAdapter()
     private let recorder: PositionRecorder
     private var moves = ReaderMoves()
     private var bridge: CFIBridge?
@@ -77,14 +76,13 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
             let navigator = try EPUBNavigatorViewController(
                 publication: publication,
                 initialLocation: await resumeLocation(in: publication),
-                config: .init(preferences: preferences)
+                config: .init(preferences: preferences.onPaper)
             )
             if let spine = await CFIBridge.spine(of: publication) {
                 bridge = CFIBridge(navigator: navigator, publication: publication, spine: spine)
             }
             navigator.delegate = self
             navigator.addObserver(ReaderInput { [weak self] in self?.moves.readerMoved() })
-            pageTurns.bind(to: navigator)
             state = .reading(navigator)
         } catch {
             state = .failed("Couldn't open this EPUB. Check your connection and try again.")
@@ -132,6 +130,27 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     func go(to link: Link) async {
         moves.readerMoved()
         _ = await navigator?.go(to: link, options: NavigatorGoOptions(animated: false))
+    }
+
+    /// A right-to-left Book has its spine on the right.
+    var isRightToLeft: Bool {
+        navigator?.settings.readingProgression == .rtl
+    }
+
+    /// How a page turn is shown, for a reader `size` big. Two pages show side by side when asked
+    /// for, or by themselves on a wide, landscape reader.
+    func turnStyle(in size: CGSize, isWide: Bool, reduceMotion: Bool) -> PageTurnStyle {
+        guard let navigator else { return .none }
+        let settings = navigator.settings
+        let sideBySide = switch settings.columnCount {
+        case .two: true
+        case .one: false
+        case .auto: isWide && size.width > size.height
+        }
+        return PageTurnStyle(
+            scrolls: settings.scroll, pagesSideBySide: sideBySide,
+            fixedLayout: publication?.metadata.layout == .fixed, reduceMotion: reduceMotion
+        )
     }
 
     /// The page is being laid out again: its size changed or the app came back.
@@ -231,8 +250,9 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
         try? await positions.flushOutbox(to: sharedPositions)
     }
 
-    func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
-        // The tap itself counted as the reader moving; showing or hiding the controls only resizes the page.
+    /// A tap on the middle of the page. The tap itself counted as the reader moving, but it
+    /// took them nowhere.
+    func toggleControls() {
         moves.relocated()
         isShowingControls.toggle()
     }
