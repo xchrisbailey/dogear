@@ -100,33 +100,35 @@ extension NoticeBanner where Action == EmptyView {
     }
 }
 
-struct SignOutButton: View {
+/// Who is signed in to which Server, and signing out. In a menu, so signing out is never one
+/// stray tap beside Downloads.
+struct AccountMenu: View {
+    let session: Session
+
     @Environment(AppModel.self) private var model
     @State private var isConfirming = false
 
     /// Downloads go too: another account or Server numbers its Books differently.
     private var warning: String {
-        switch (model.outboxCount > 0, !model.downloadList.downloads.isEmpty) {
+        let again = "Signing in again needs your Server address and password."
+        return switch (model.outboxCount > 0, !model.downloadList.downloads.isEmpty) {
         case (true, true): "Some of your reading progress hasn't reached your Server yet. Signing out discards it and removes your Downloads from this device."
-        case (true, false): "Some of your reading progress hasn't reached your Server yet. Signing out discards it."
-        default: "Signing out removes your Downloads from this device."
+        case (true, false): "Some of your reading progress hasn't reached your Server yet. Signing out discards it. \(again)"
+        case (false, true): "Signing out removes your Downloads from this device. \(again)"
+        case (false, false): "Signing out clears this device's copy of your library. \(again)"
         }
     }
 
     var body: some View {
-        Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right") {
-            if model.outboxCount > 0 || !model.downloadList.downloads.isEmpty {
-                isConfirming = true
-            } else {
-                Task { await model.signOut() }
+        Menu("Account", systemImage: "person.crop.circle") {
+            Section("\(session.username) on \(session.server.host() ?? session.server.absoluteString)") {
+                Button("Sign Out…", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                    isConfirming = true
+                }
             }
         }
-        .confirmationDialog(
-            warning,
-            isPresented: $isConfirming,
-            titleVisibility: .visible
-        ) {
-            Button("Sign Out Anyway", role: .destructive) {
+        .confirmationDialog(warning, isPresented: $isConfirming, titleVisibility: .visible) {
+            Button("Sign Out", role: .destructive) {
                 Task { await model.signOut() }
             }
         }

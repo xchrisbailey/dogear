@@ -90,6 +90,8 @@ final class AudiobookPlayerModel {
 
     var bookFileID: Int? { info?.bookFileID }
 
+    var bookID: Int { audiobook.bookID }
+
     func open() async {
         guard case .opening = state else { return }
         let info: AudiobookInfo

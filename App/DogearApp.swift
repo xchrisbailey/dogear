@@ -1,11 +1,16 @@
 import DogearCore
 import Network
 import SwiftUI
+import TipKit
 
 @main
 struct DogearApp: App {
     @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
     @State private var model = AppModel(account: Account(tokenStore: KeychainTokenStore(), passwordStore: KeychainPasswordStore()))
+
+    init() {
+        try? Tips.configure()
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -34,6 +39,17 @@ final class AppModel {
     private(set) var continueRows = ContinueRows()
     /// The latest Position in every Book file read on this device, for showing how far in each Book is.
     private(set) var recordedPositions: [Position] = []
+    /// The audiobook in the player. It plays on while the player is closed, until it's ejected.
+    private(set) var nowPlaying: NowPlaying?
+    /// Whether the player is open over the library.
+    var isShowingPlayer = false
+
+    struct NowPlaying: Identifiable {
+        let player: AudiobookPlayerModel
+        let cover: Cover?
+
+        var id: ObjectIdentifier { ObjectIdentifier(player) }
+    }
 
     init(account: Account) {
         self.account = account
@@ -109,6 +125,29 @@ final class AppModel {
             guard let cover else { return nil }
             return await library?.image(for: cover)
         }
+    }
+
+    /// Opens the player on the Book's audiobook. The one already loaded just opens again; another
+    /// one is ejected first.
+    func play(_ book: Book) async {
+        if let nowPlaying, nowPlaying.player.bookID == book.id {
+            isShowingPlayer = true
+            return
+        }
+        guard let player = await audiobookPlayer(for: book) else { return }
+        await eject()
+        nowPlaying = NowPlaying(player: player, cover: book.audiobookCover ?? book.cover)
+        isShowingPlayer = true
+        // Not tied to the player's screen, which can close while the audiobook is still opening.
+        Task { await player.open() }
+    }
+
+    /// Stops the audiobook, saves its Position and closes the player.
+    func eject() async {
+        guard let nowPlaying else { return }
+        self.nowPlaying = nil
+        isShowingPlayer = false
+        await nowPlaying.player.close()
     }
 
     /// Follows the Session for the app's lifetime, so a refused refresh anywhere shows up here.
@@ -200,8 +239,9 @@ final class AppModel {
         session = try await account.signIn(address: address, username: username, password: password)
     }
 
-    /// Clears the Outbox along with everything else; `SignOutButton` warns first if it isn't empty.
+    /// Clears the Outbox along with everything else; `AccountMenu` warns first if it isn't empty.
     func signOut() async {
+        await eject()
         await account.signOut()
         await library?.forget()
         await positions?.forget()
@@ -240,6 +280,8 @@ struct RootView: View {
                     await model.checkServerIfOffline()
                     await model.flushOutbox()
                 }
+                // Here and not in the player, which may be closed while its audiobook is loaded.
+                Task { await model.nowPlaying?.player.catchUp() }
             }
         }
     }

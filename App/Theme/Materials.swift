@@ -38,8 +38,12 @@ enum Theme {
     static func stamped(_ size: CGFloat) -> Font { .system(size: size, weight: .bold, design: .serif) }
     /// Notes and shelf labels, scaling with Dynamic Type.
     static func hand(_ size: CGFloat) -> Font { .custom("Noteworthy-Bold", size: size) }
-    /// Marker on cassette labels, fixed like spine lettering.
+    /// Marker on cassette faces, fixed like spine lettering.
     static func marker(_ size: CGFloat) -> Font { .custom("MarkerFelt-Wide", fixedSize: size) }
+    /// Marker on the rack's cassette labels, which are read like a list and scale with Dynamic Type.
+    static func marker(_ size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
+        .custom("MarkerFelt-Wide", size: size, relativeTo: style)
+    }
 }
 
 extension Color {

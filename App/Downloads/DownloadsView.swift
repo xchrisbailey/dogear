@@ -85,22 +85,44 @@ struct DownloadsView: View {
 private struct DownloadRow: View {
     let download: Download
 
+    @Environment(AppModel.self) private var model
+
+    /// Retrying needs the permission, and a reason that another try could get past.
+    private var canRetry: Bool {
+        model.downloadList.canDownload && download.failure?.canRetry ?? true
+    }
+
     var body: some View {
-        HStack {
-            Text(download.format.name)
-            Spacer()
-            switch download.state {
-            case let .downloading(progress):
-                ProgressView(value: progress)
-                    .frame(width: 80)
-            case .finished:
-                Text(DownloadsView.size(download.bytes))
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(download.format.name)
+                Spacer()
+                switch download.state {
+                case let .downloading(progress):
+                    ProgressView(value: progress)
+                        .frame(width: 80)
+                case .finished:
+                    Text(DownloadsView.size(download.bytes))
+                        .foregroundStyle(.secondary)
+                case .failed:
+                    if canRetry {
+                        Button("Retry", systemImage: "arrow.clockwise") {
+                            Task { try? await model.downloads?.retry(bookFileID: download.bookFileID) }
+                        }
+                        .buttonStyle(.borderless)
+                    } else {
+                        Label("Failed", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            if download.state == .failed {
+                Text(download.failure?.message ?? "The download stopped before it finished.")
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
-            case .failed:
-                Label("Failed", systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.red)
             }
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -121,7 +143,7 @@ struct DownloadMenu: View {
                     Button("Download\(name)", systemImage: "arrow.down.circle") { start(file) }
                 }
             case .failed:
-                if model.downloadList.canDownload {
+                if model.downloadList.canDownload, model.downloadList.download(bookFileID: file.id)?.failure?.canRetry ?? true {
                     Button("Retry Download\(name)", systemImage: "arrow.clockwise") { start(file) }
                 }
                 Button("Remove Download\(name)", systemImage: "trash", role: .destructive) { remove(file) }
