@@ -136,7 +136,7 @@ struct LibraryView: View {
             // The bookcase is dark wood whatever the device's appearance. Set here and not on the
             // whole view, so the readers it presents keep following the device.
             .environment(\.colorScheme, .dark)
-            .tint(Theme.gilt)
+            .tint(Theme.accent)
         }
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
         .background { FeltBackground() }
@@ -182,7 +182,7 @@ struct LibraryView: View {
                 }
             }
             .environment(\.colorScheme, .dark)
-            .tint(Theme.gilt)
+            .tint(Theme.accent)
         }
         .fullScreenCover(item: $reading) { open in
             switch open.reader {

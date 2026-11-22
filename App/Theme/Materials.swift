@@ -42,6 +42,12 @@ enum Theme {
     static let tabLetteringPressed = Color(hex: 0xF1E3C8)
     static let stitching = Color(hex: 0xE6C8A0)
     static let tabTray = Color(hex: 0x24140B)
+    /// Controls and marks on the Library that aren't lettering: the tan of the tab lettering.
+    static let accent = tabLettering
+    /// Dark iron, for eyelets.
+    static let iron = Color(hex: 0x5A5652)
+    /// A knot of cream thread, from light top to shaded foot.
+    static let thread = [Color(hex: 0xF4EAD2), Color(hex: 0xE6C8A0), Color(hex: 0x8A6E4E)]
 
     /// Nameplates and covers.
     static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .heavy, design: .serif) }
@@ -255,37 +261,7 @@ struct LeatherTabStyle: ButtonStyle {
     }
 }
 
-/// A brass drawer front that sits pressed in while it's the one chosen.
-struct DrawerButtonStyle: ButtonStyle {
-    let isOn: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        let pressed = isOn || configuration.isPressed
-        configuration.label
-            .font(Theme.label(.subheadline))
-            .foregroundStyle(Theme.ink)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .background {
-                // The drop is the drawer front's own, so the lettering isn't doubled by it.
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(LinearGradient(
-                        colors: pressed ? [Theme.brass[1], Theme.brass[0]] : [Theme.brass[0], Theme.brass[2]],
-                        startPoint: .top, endPoint: .bottom
-                    ))
-                    .shadow(color: .black.opacity(pressed ? 0 : 0.5), radius: 0, y: pressed ? 0 : 3)
-            }
-            .overlay {
-                if pressed {
-                    RoundedRectangle(cornerRadius: 4).strokeBorder(.black.opacity(0.35), lineWidth: 1)
-                }
-            }
-            .offset(y: pressed ? 3 : 0)
-    }
-}
-
-/// A paper tag hung from the shelf by a brass grommet, for notices.
+/// A paper tag hung from the shelf by an iron eyelet, for notices.
 struct PaperTag<Content: View>: View {
     var edge: Color = Theme.inkSoft
     @ViewBuilder var content: Content
@@ -295,7 +271,7 @@ struct PaperTag<Content: View>: View {
             Circle()
                 .fill(Theme.backPanel)
                 .frame(width: 9, height: 9)
-                .overlay { Circle().stroke(Theme.brass[1], lineWidth: 2) }
+                .overlay { Circle().stroke(Theme.iron, lineWidth: 2) }
                 .accessibilityHidden(true)
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
