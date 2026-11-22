@@ -3,6 +3,7 @@
 #   scripts/app.sh build | test     build or test on a throwaway simulator
 #   scripts/app.sh resolve          only fetch the app's packages (no simulator)
 # XCODEBUILD_EXTRA_ARGS adds flags to the build/test call, e.g. -showBuildTimingSummary.
+# APP_VERBOSE=1 prints xcodebuild's full log instead of only warnings and errors.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -20,9 +21,10 @@ if [[ "$action" == resolve ]]; then
 fi
 
 read -ra extra <<< "${XCODEBUILD_EXTRA_ARGS:-}"
+[[ -n "${APP_VERBOSE:-}" ]] || extra+=(-quiet)
 
 # ${extra[@]+…} keeps macOS's bash 3.2 from failing on an empty array under set -u.
 exec scripts/with-simulator.sh sh -c '
   xcodebuild "$@" -project Dogear.xcodeproj -scheme Dogear \
-    -destination "id=$UDID" -derivedDataPath .build/DD -quiet
+    -destination "id=$UDID" -derivedDataPath .build/DD
 ' sh "$action" ${extra[@]+"${extra[@]}"}
