@@ -5,8 +5,10 @@
 // that scripts/testflight.sh already uses, and only ever sends GET requests.
 //
 // Config (environment):
-//   ASC_KEY_ID      key ID. Optional if exactly one AuthKey_*.p8 is in ~/.appstoreconnect/private_keys
-//   ASC_ISSUER_ID   issuer ID. Falls back to the first line of ~/.appstoreconnect/issuer_id
+//   ASC_KEY_ID      key ID. Falls back to ~/.config/dogear/env, then to the only AuthKey_*.p8 in
+//                   ~/.appstoreconnect/private_keys
+//   ASC_ISSUER_ID   issuer ID. Falls back to ~/.config/dogear/env, then to the first line of
+//                   ~/.appstoreconnect/issuer_id
 //   ASC_KEY_PATH    defaults to ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8
 //   ASC_BUNDLE_ID   defaults to computer.srcery.dogear
 //   ASC_FEEDBACK_DIR  where screenshots and crash logs are saved; defaults to <repo>/.build/testflight-feedback
@@ -28,19 +30,33 @@ const MAX_INLINE_IMAGES = 3;
 
 // ---------- Credentials and JWT ----------
 
+// Local config file holding the ASC_ values. Claude Code starts this server without sourcing it,
+// so read the two values from it directly: `[export ]NAME=value` lines only.
+function dogearEnv() {
+  const file = join(homedir(), ".config", "dogear", "env");
+  const vars = {};
+  if (!existsSync(file)) return vars;
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    const m = line.match(/^\s*(?:export\s+)?(ASC_KEY_ID|ASC_ISSUER_ID)=(.*)$/);
+    if (m) vars[m[1]] = m[2].trim().replace(/^(['"])(.*)\1$/, "$2");
+  }
+  return vars;
+}
+
 function loadConfig() {
-  let keyId = process.env.ASC_KEY_ID;
+  const local = dogearEnv();
+  let keyId = process.env.ASC_KEY_ID || local.ASC_KEY_ID;
   if (!keyId) {
     const dir = join(ASC_DIR, "private_keys");
     const keys = existsSync(dir) ? readdirSync(dir).filter((f) => /^AuthKey_.+\.p8$/.test(f)) : [];
     if (keys.length === 1) keyId = keys[0].slice("AuthKey_".length, -".p8".length);
     else throw new Error(keys.length ? `Several keys in ${dir}; set ASC_KEY_ID.` : "Set ASC_KEY_ID (no key found in ~/.appstoreconnect/private_keys).");
   }
-  let issuerId = process.env.ASC_ISSUER_ID;
+  let issuerId = process.env.ASC_ISSUER_ID || local.ASC_ISSUER_ID;
   if (!issuerId && existsSync(join(ASC_DIR, "issuer_id"))) {
     issuerId = readFileSync(join(ASC_DIR, "issuer_id"), "utf8").split("\n")[0].trim();
   }
-  if (!issuerId) throw new Error("Set ASC_ISSUER_ID, or put it in ~/.appstoreconnect/issuer_id.");
+  if (!issuerId) throw new Error("Set ASC_ISSUER_ID (environment or ~/.config/dogear/env), or put it in ~/.appstoreconnect/issuer_id.");
   const keyPath = process.env.ASC_KEY_PATH || join(ASC_DIR, "private_keys", `AuthKey_${keyId}.p8`);
   if (!existsSync(keyPath)) throw new Error(`API key not found at ${keyPath}`);
   return { keyId, issuerId, key: createPrivateKey(readFileSync(keyPath)) };
