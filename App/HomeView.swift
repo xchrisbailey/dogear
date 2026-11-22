@@ -49,10 +49,24 @@ struct HomeView: View {
                     if model.downloadList.canDownload || !model.downloadList.downloads.isEmpty {
                         Button("Downloads", systemImage: "arrow.down.circle") { isShowingDownloads = true }
                     }
-                    SignOutButton()
+                    AccountMenu(session: session)
                 }
                 .sheet(isPresented: $isShowingDownloads) { DownloadsView() }
             }
+        }
+        // Under both columns, so the audiobook stays in reach wherever the library is.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let nowPlaying = model.nowPlaying {
+                NowPlayingBar(player: nowPlaying.player) { model.isShowingPlayer = true }
+            }
+        }
+        // By item, so the player stays drawn as it slides away after an Eject.
+        .fullScreenCover(item: Binding {
+            model.isShowingPlayer ? model.nowPlaying : nil
+        } set: {
+            if $0 == nil { model.isShowingPlayer = false }
+        }) { nowPlaying in
+            AudiobookPlayerView(model: nowPlaying.player, cover: nowPlaying.cover, library: library)
         }
     }
 }

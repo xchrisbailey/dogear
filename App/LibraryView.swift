@@ -1,5 +1,6 @@
 import DogearCore
 import SwiftUI
+import TipKit
 
 struct LibraryView: View {
     let library: Library
@@ -54,6 +55,8 @@ struct LibraryView: View {
         let shelved = ebooks
         let racked = audiobooks
         let spines = shelved.map(Spine.init)
+        // Looked up per Book file below, so each spine doesn't search every Position and Download.
+        let shelving = ShelvingLookup(positions: model.recordedPositions, downloads: model.downloadList)
         // Inside the page margin and the bookcase's own sides.
         let shelves = width > 0
             ? Shelves.fill(thicknesses: spines.map(\.thickness), shelfWidth: width - 2 * (Self.margin + Self.caseSide), spacing: Self.spineGap)
@@ -87,13 +90,21 @@ struct LibraryView: View {
                         continueShelf("Continue Listening", model.continueRows.listening, height: CassetteFace.size.height + 34)
                     }
                 }
+                if !shelved.isEmpty || !racked.isEmpty {
+                    TipView(CatalogCardTip())
+                        .tipBackground(Theme.paper)
+                        .tint(Theme.ribbon)
+                        // Paper is light whatever the device's appearance.
+                        .environment(\.colorScheme, .light)
+                        .padding(.bottom, 18)
+                }
                 if !shelved.isEmpty {
                     ShelfLabel("Ebooks")
                         .padding(.bottom, 10)
                     ForEach(shelves, id: \.lowerBound) { shelf in
                         BookShelf {
                             ForEach(shelf, id: \.self) { index in
-                                spine(spines[index], of: shelved[index])
+                                spine(spines[index], of: shelved[index], shelving)
                             }
                         }
                     }
@@ -107,7 +118,7 @@ struct LibraryView: View {
                         .frame(height: 10)
                         .clipShape(.rect(topLeadingRadius: 8, topTrailingRadius: 8))
                     ForEach(racked) { book in
-                        cassette(book)
+                        cassette(book, shelving)
                             .padding(.horizontal, 12)
                             .padding(.bottom, 4)
                             .background(Self.rack)
@@ -177,7 +188,6 @@ struct LibraryView: View {
             switch open.reader {
             case let .epub(reader): EPUBReaderView(title: open.title, model: reader)
             case let .pdf(reader): PDFReaderView(title: open.title, model: reader)
-            case let .audiobook(player, cover): AudiobookPlayerView(model: player, cover: cover, library: library)
             }
         }
         .refreshable { await refresh() }
@@ -196,6 +206,12 @@ struct LibraryView: View {
             ContentUnavailableView.search(text: search)
         } else if scope != .everything || kind != .all {
             ContentUnavailableView("No Books here", systemImage: "books.vertical")
+        } else if !canSync {
+            // Nothing cached and no Server to ask, which isn't the same as an empty library.
+            ContentUnavailableView(
+                "Library not loaded yet", systemImage: "wifi.slash",
+                description: Text("Your Books show up here once Dogear can reach your Server.")
+            )
         } else {
             ContentUnavailableView("No Books yet", systemImage: "books.vertical", description: Text("Books you add in Grimmory show up here."))
         }
@@ -228,7 +244,7 @@ struct LibraryView: View {
                             } label: {
                                 ContinueCard(entry: entry, library: library)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(LiftsWhenPressed())
                         }
                     }
                     .scrollTargetLayout()
@@ -240,28 +256,36 @@ struct LibraryView: View {
         .padding(.bottom, 18)
     }
 
-    private func spine(_ spine: Spine, of book: Book) -> some View {
+    private func spine(_ spine: Spine, of book: Book, _ shelving: ShelvingLookup) -> some View {
         let files = Self.openable(book, among: Self.ebookFormats)
         // One format opens; two or none shows the card, to pick or to see why not.
         var read: (() -> Void)?
         if files.count == 1 { read = { Task { await open(files[0], of: book) } } }
         return BookSpine(
-            book: book, spine: spine, throughBook: book.throughBook(including: model.recordedPositions),
-            download: ShelfDownload(of: book.files.filter { $0.format != .audiobook }, in: model.downloadList),
+            book: book, spine: spine, throughBook: shelving.throughBook(book),
+            download: shelving.download(of: book.files.filter { $0.format != .audiobook }),
             library: library
         )
-        .shelved(open: read) { pulled = book }
+        // Reaching into the gap beside it, so a tap between two thin spines still lands on one.
+        .shelved(open: read, reach: Self.spineGap / 2) { pull(book) }
     }
 
-    private func cassette(_ book: Book) -> some View {
+    private func cassette(_ book: Book, _ shelving: ShelvingLookup) -> some View {
         var play: (() -> Void)?
         if let file = Self.openable(book, among: [.audiobook]).first { play = { Task { await open(file, of: book) } } }
         return CassetteCase(
-            book: book, throughBook: book.throughBook(including: model.recordedPositions),
-            download: ShelfDownload(of: book.files.filter { $0.format == .audiobook }, in: model.downloadList),
+            book: book, throughBook: shelving.throughBook(book),
+            download: shelving.download(of: book.files.filter { $0.format == .audiobook }),
             library: library
         )
-        .shelved(open: play) { pulled = book }
+        .shelved(open: play) { pull(book) }
+    }
+
+    /// Takes the Book off the shelf to show its catalog card.
+    private func pull(_ book: Book) {
+        pulled = book
+        // Found the card, so the tip pointing to it has done its job.
+        CatalogCardTip().invalidate(reason: .actionPerformed)
     }
 
     /// EPUB first, since it reflows. With both, the reader picks.
@@ -274,10 +298,14 @@ struct LibraryView: View {
     }
 
     private func open(_ file: BookFile, of book: Book) async {
+        // The player lives above the library, so it can play on while closed.
+        if file.format == .audiobook {
+            await model.play(book)
+            return
+        }
         let reader: OpenBookFile.Reader? = switch file.format {
         case .epub: await model.epubReader(for: book, file: file).map(OpenBookFile.Reader.epub)
         case .pdf: await model.pdfReader(for: book, file: file).map(OpenBookFile.Reader.pdf)
-        case .audiobook: await model.audiobookPlayer(for: book).map { .audiobook($0, cover: book.audiobookCover ?? book.cover) }
         default: nil
         }
         guard let reader else { return }
@@ -288,7 +316,6 @@ struct LibraryView: View {
         enum Reader {
             case epub(EPUBReaderModel)
             case pdf(PDFReaderModel)
-            case audiobook(AudiobookPlayerModel, cover: Cover?)
         }
 
         let id = UUID()
@@ -316,6 +343,34 @@ struct LibraryView: View {
         var search: String
         var kind: BookKind
     }
+}
+
+/// Positions and Downloads by Book file, built once per update of the shelves. A large library
+/// otherwise searched every Position and Download for every spine on each progress tick.
+private struct ShelvingLookup {
+    private let positions: [Int: [Position]]
+    private let downloads: [Int: Download.State]
+
+    init(positions: [Position], downloads: DownloadList) {
+        self.positions = Dictionary(grouping: positions, by: \.bookFileID)
+        // The first for each Book file, as `DownloadList.download(bookFileID:)` finds.
+        self.downloads = Dictionary(downloads.downloads.map { ($0.bookFileID, $0.state) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    func throughBook(_ book: Book) -> Double? {
+        book.throughBook(including: book.files.flatMap { positions[$0.id] ?? [] })
+    }
+
+    func download(of files: [BookFile]) -> ShelfDownload {
+        ShelfDownload(files.compactMap { downloads[$0.id] })
+    }
+}
+
+/// The card behind a press and hold is where Downloads are, and nothing on a spine says so.
+private struct CatalogCardTip: Tip {
+    var title: Text { Text("Press and hold a Book") }
+    var message: Text? { Text("Its catalog card shows every format, and downloads it for reading offline.") }
+    var image: Image? { Image(systemName: "hand.tap") }
 }
 
 /// A row of Books on the back panel of the bookcase, standing on a ledge.
@@ -416,13 +471,49 @@ struct CoverImage: View {
 
 private extension View {
     /// A Book on a shelf or in the rack: a tap opens it, a long press pulls it out to show its
-    /// catalog card. Without `open`, a tap pulls it out too.
-    func shelved(open: (() -> Void)?, pull: @escaping () -> Void) -> some View {
-        contentShape(.rect)
+    /// catalog card. Without `open`, a tap pulls it out too. `reach` widens where a tap lands.
+    func shelved(open: (() -> Void)?, reach: CGFloat = 0, pull: @escaping () -> Void) -> some View {
+        modifier(Shelved(open: open, reach: reach, pull: pull))
+    }
+}
+
+private struct Shelved: ViewModifier {
+    let open: (() -> Void)?
+    let reach: CGFloat
+    let pull: () -> Void
+
+    @State private var isPressed = false
+
+    func body(content: Content) -> some View {
+        content
+            .modifier(Lifted(isPressed: isPressed))
+            .padding(.horizontal, reach)
+            .contentShape(.rect)
             .onTapGesture(perform: open ?? pull)
-            .onLongPressGesture(perform: pull)
+            .onLongPressGesture(perform: pull, onPressingChanged: { isPressed = $0 })
+            .padding(.horizontal, -reach)
             .accessibilityAddTraits(.isButton)
             .accessibilityAction(named: "Show Details", pull)
+    }
+}
+
+/// A Book raised a little off the shelf while a finger is on it.
+private struct Lifted: ViewModifier {
+    let isPressed: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .offset(y: isPressed && !reduceMotion ? -4 : 0)
+            .brightness(isPressed ? 0.08 : 0)
+            .animation(.snappy(duration: 0.15), value: isPressed)
+    }
+}
+
+private struct LiftsWhenPressed: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.modifier(Lifted(isPressed: configuration.isPressed))
     }
 }
 

@@ -8,9 +8,9 @@ enum ShelfDownload: Equatable {
     case failed
     case downloaded
 
-    /// Downloading wins over failed, which wins over downloaded, so the busiest state shows.
-    init(of files: [BookFile], in list: DownloadList) {
-        let states = files.compactMap { list.download(bookFileID: $0.id)?.state }
+    /// From the states of a Book's Downloads. Downloading wins over failed, which wins over
+    /// downloaded, so the busiest state shows.
+    init(_ states: [Download.State]) {
         var progress: Double?
         for case let .downloading(running) in states where progress == nil { progress = running }
         if let progress {

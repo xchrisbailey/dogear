@@ -143,4 +143,46 @@ struct DownloadsTests {
         #expect(await downloads.list.downloads.map(\.bookFileID) == [4])
         #expect(await downloads.downloaded(audiobook) == nil)
     }
+
+    @Test func aFailedDownloadSaysWhyAndRetriesFromTheBookFileAlone() async throws {
+        let account = try await signedIn()
+        let (downloads, transport) = try await downloads(account)
+        await downloads.checkPermission()
+        let atomicHabits = try await book(4, account)
+        let epub = try #require(atomicHabits.files.first)
+        transport.hold()
+        try await downloads.download(epub, of: atomicHabits)
+
+        server.setKind(.unreachable)
+        await transport.release()
+
+        let failed = try #require(await downloads.list.download(bookFileID: 4))
+        #expect(failed.state == .failed)
+        #expect(failed.failure == .unreachable)
+        #expect(failed.failure?.canRetry == true)
+
+        // From the Downloads list, which has no Book to hand.
+        server.setKind(.grimmory)
+        try await downloads.retry(bookFileID: 4)
+
+        let retried = try #require(await downloads.list.download(bookFileID: 4))
+        #expect(retried.state == .finished)
+        #expect(retried.failure == nil)
+    }
+
+    @Test func aBookFileGoneFromTheServerIsNotWorthRetrying() async throws {
+        let account = try await signedIn()
+        let (downloads, transport) = try await downloads(account)
+        await downloads.checkPermission()
+        let atomicHabits = try await book(4, account)
+        transport.hold()
+        try await downloads.download(try #require(atomicHabits.files.first), of: atomicHabits)
+
+        server.shelve([])
+        await transport.release()
+
+        let failed = try #require(await downloads.list.download(bookFileID: 4))
+        #expect(failed.failure == .gone)
+        #expect(failed.failure?.canRetry == false)
+    }
 }

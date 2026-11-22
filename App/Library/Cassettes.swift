@@ -28,7 +28,7 @@ struct CassetteCase: View {
             Spacer(minLength: 0)
             if let throughBook {
                 Text(throughBook.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.custom("Noteworthy-Bold", fixedSize: 11))
+                    .font(.custom("Noteworthy-Bold", size: 11, relativeTo: .caption2))
                     .foregroundStyle(Theme.ribbon)
                     .padding(.horizontal, 5)
                     .overlay { Capsule().strokeBorder(Theme.ribbon, lineWidth: 1.5) }
@@ -37,7 +37,8 @@ struct CassetteCase: View {
             badge
         }
         .padding(.trailing, 8)
-        .frame(height: 28)
+        // Grows with the lettering at large text sizes.
+        .frame(minHeight: 28)
         .background(Theme.paper)
         .clipShape(.rect(cornerRadius: 1))
         .padding(.vertical, 4)
@@ -64,7 +65,7 @@ struct CassetteCase: View {
 
     private var title: some View {
         Text(Spine.title(for: book.title))
-            .font(Theme.marker(15))
+            .font(Theme.marker(15, relativeTo: .body))
             .foregroundStyle(Theme.pen)
             .lineLimit(1)
     }
@@ -72,7 +73,7 @@ struct CassetteCase: View {
     @ViewBuilder private var author: some View {
         if let author = book.authors.first {
             Text(author)
-                .font(.custom("Noteworthy-Light", fixedSize: 12))
+                .font(.custom("Noteworthy-Light", size: 12, relativeTo: .caption))
                 .foregroundStyle(Theme.inkSoft)
                 .lineLimit(1)
                 .fixedSize()

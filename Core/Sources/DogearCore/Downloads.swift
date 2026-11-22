@@ -75,13 +75,8 @@ public actor Downloads {
     public func download(_ file: BookFile, of book: Book) async throws(DownloadError) {
         guard manifest.canDownload else { throw .notAllowed }
         guard file.isSupported, [.epub, .pdf, .audiobook].contains(file.format) else { throw .notSupported }
-        if let index = manifest.entries.firstIndex(where: { $0.bookFileID == file.id }) {
-            guard manifest.entries[index].isFailed else { return }
-            manifest.entries[index].isFailed = false
-            save()
-            for part in manifest.entries[index].parts where !part.isDone {
-                await start(part)
-            }
+        if manifest.entries.contains(where: { $0.bookFileID == file.id }) {
+            try await retry(bookFileID: file.id)
             return
         }
         guard let server = await account.session?.server else { throw .request(.signedOut) }
@@ -117,6 +112,21 @@ public actor Downloads {
         }
     }
 
+    /// Carries on with a failed Download from what already arrived. Needs only the Book file,
+    /// so a Download can be retried after its Book has left the library.
+    public func retry(bookFileID: Int) async throws(DownloadError) {
+        guard manifest.canDownload else { throw .notAllowed }
+        guard let index = manifest.entries.firstIndex(where: { $0.bookFileID == bookFileID }),
+              manifest.entries[index].isFailed
+        else { return }
+        manifest.entries[index].isFailed = false
+        manifest.entries[index].failure = nil
+        save()
+        for part in manifest.entries[index].parts where !part.isDone {
+            await start(part)
+        }
+    }
+
     private func audiobookInfo(bookID: Int, server: URL) async throws(DownloadError) -> StoredAudiobookInfo {
         let url = server.appending(path: "api/v1/audiobooks/\(bookID)/info")
             .appending(queryItems: [URLQueryItem(name: "bookType", value: "AUDIOBOOK")])
@@ -138,7 +148,7 @@ public actor Downloads {
         do {
             token = try await account.accessToken()
         } catch {
-            fail(transferID: part.transferID)
+            fail(transferID: part.transferID, because: error == .needsSignIn ? .needsSignIn : .unreachable)
             return
         }
         await send(part, token: token)
@@ -184,7 +194,7 @@ public actor Downloads {
                 try? FileManager.default.removeItem(at: destination)
                 try FileManager.default.moveItem(at: file, to: destination)
             } catch {
-                fail(transferID: transferID)
+                fail(transferID: transferID, because: .couldNotSave)
                 return
             }
             let size = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
@@ -198,27 +208,32 @@ public actor Downloads {
             manifest.entries[entry].parts[part].hasRetried = true
             let retry = manifest.entries[entry].parts[part]
             guard let token = try? await account.accessToken(replacing: sentTokens[transferID] ?? "") else {
-                fail(transferID: transferID)
+                fail(transferID: transferID, because: .needsSignIn)
                 return
             }
             await send(retry, token: token)
         case 403:
             // The admin has taken the permission away since it was last checked.
             manifest.canDownload = false
-            fail(transferID: transferID)
+            fail(transferID: transferID, because: .notAllowed)
+        case 401:
+            fail(transferID: transferID, because: .needsSignIn)
+        case 404:
+            fail(transferID: transferID, because: .gone)
         default:
-            fail(transferID: transferID)
+            fail(transferID: transferID, because: .serverError)
         }
     }
 
     /// The transfer couldn't reach the Server or was cut off.
     public func transferFailed(_ transferID: String) {
-        fail(transferID: transferID)
+        fail(transferID: transferID, because: .unreachable)
     }
 
-    private func fail(transferID: String) {
+    private func fail(transferID: String, because failure: Download.Failure) {
         guard let (entry, _) = locate(transferID) else { return }
         manifest.entries[entry].isFailed = true
+        manifest.entries[entry].failure = failure
         let others = manifest.entries[entry].parts.filter { !$0.isDone && $0.transferID != transferID }.map(\.transferID)
         sentTokens[transferID] = nil
         save()
@@ -352,12 +367,47 @@ public struct Download: Sendable, Equatable, Identifiable {
         case failed
     }
 
+    /// Why a Download failed, so the reader knows whether trying again can help.
+    public enum Failure: String, Sendable, Codable {
+        /// The connection to the Server was lost, or it couldn't be reached.
+        case unreachable
+        /// The Server wants the reader to sign in again.
+        case needsSignIn
+        /// The account may no longer download.
+        case notAllowed
+        /// The Book file has gone from the Server.
+        case gone
+        /// The Server answered with an error.
+        case serverError
+        /// The device couldn't store it, usually for lack of space.
+        case couldNotSave
+
+        public var message: String {
+            switch self {
+            case .unreachable: "Lost the connection to your Server."
+            case .needsSignIn: "Your sign-in expired. Sign in again, then retry."
+            case .notAllowed: "Your account can no longer download."
+            case .gone: "This Book file is no longer on your Server."
+            case .serverError: "Your Server couldn't send it."
+            case .couldNotSave: "Couldn't save it on this device. It may be out of space."
+            }
+        }
+
+        /// Whether retrying can work as things stand.
+        public var canRetry: Bool {
+            self != .notAllowed && self != .gone
+        }
+    }
+
     public var bookID: Int
     public var bookFileID: Int
     public var format: BookFile.Format
     /// The Book's title when downloaded, so it's named even if the Book leaves the library.
     public var title: String
     public var state: State
+    /// Why it failed; nil unless `state` is `.failed`, and for Downloads that failed before
+    /// Dogear kept the reason.
+    public var failure: Failure?
     /// Storage used on the device.
     public var bytes: Int64
 
@@ -486,6 +536,8 @@ private struct Entry: Codable {
     var title: String
     var parts: [Part]
     var isFailed = false
+    /// Optional, so manifests saved before it existed still load.
+    var failure: Download.Failure?
 
     var download: Download {
         let bytes = parts.filter(\.isDone).reduce(0) { $0 + $1.writtenBytes }
@@ -501,7 +553,10 @@ private struct Entry: Codable {
             let progress = expected > 0 ? Double(written) / Double(expected) : Double(parts.filter(\.isDone).count) / Double(max(parts.count, 1))
             state = .downloading(progress: min(progress, 1))
         }
-        return Download(bookID: bookID, bookFileID: bookFileID, format: format, title: title, state: state, bytes: bytes)
+        return Download(
+            bookID: bookID, bookFileID: bookFileID, format: format, title: title, state: state,
+            failure: state == .failed ? failure : nil, bytes: bytes
+        )
     }
 }
 

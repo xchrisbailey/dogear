@@ -23,6 +23,14 @@ struct CatalogCard: View {
         }
     }
 
+    /// Why each failed Download stopped, which the shelf only marks with a "!".
+    private var failures: [String] {
+        book.files.compactMap { file in
+            guard let download = model.downloadList.download(bookFileID: file.id), download.state == .failed else { return nil }
+            return "\(file.format.name) download failed. \(download.failure?.message ?? "It stopped before it finished.")"
+        }
+    }
+
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
@@ -62,6 +70,8 @@ struct CatalogCard: View {
                 .contentShape(.rect)
                 .onTapGesture(perform: putBack)
             }
+            // Pulled down past the top, the Book goes back, like a sheet swiped away.
+            .modifier(PullsDownToClose(close: putBack))
         }
         .background {
             WoodBackground()
@@ -88,6 +98,9 @@ struct CatalogCard: View {
             line("Formats", BookFormats.labels(for: book.files).joined(separator: " · "))
             if !onDevice.isEmpty {
                 line("On this device", onDevice.joined(separator: " · "))
+            }
+            ForEach(failures, id: \.self) { failure in
+                line(failure)
             }
             if let throughBook {
                 Text("\(throughBook.formatted(.percent.precision(.fractionLength(0)))) READ")
