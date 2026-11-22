@@ -13,11 +13,11 @@ One title in the Grimmory library. A Book can hold several Book files, such as a
 _Avoid_: Title, item, entry
 
 **Book file**:
-One readable or listenable file belonging to a Book: an EPUB, a PDF, or an audiobook (single M4B or a folder of tracks).
+One readable or listenable file belonging to a Book: an EPUB, a PDF, a MOBI, AZW3 or FB2, or an audiobook (single M4B or a folder of tracks).
 _Avoid_: Edition, asset
 
 **Format**:
-The kind of a Book file: EPUB, PDF, or audiobook.
+The kind of a Book file: EPUB, PDF, MOBI, AZW3, FB2, or audiobook. MOBI, AZW3 and FB2 open in the EPUB reader, converted to an EPUB on the device when opened (ADR 0005), and their Positions are EPUB Positions.
 
 **Track**:
 One audio file within a folder audiobook.

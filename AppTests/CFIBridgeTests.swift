@@ -47,15 +47,16 @@ struct CFIBridgeTests {
     }
 }
 
-/// The fixture EPUB open in a navigator on screen, with the bridge's scripts installed.
+/// An EPUB open in a navigator on screen, with the bridge's scripts installed.
 @MainActor
-private final class OpenReader: EPUBNavigatorDelegate {
+final class OpenReader: EPUBNavigatorDelegate {
     let navigator: EPUBNavigatorViewController
     private(set) var bridge: CFIBridge!
     private let window: UIWindow
     private var locations = 0
 
-    init() async throws {
+    /// The fixture EPUB.
+    convenience init() async throws {
         let folder = try #require(Bundle(for: OpenReader.self).url(forResource: "LighthouseLedger", withExtension: nil))
         let container = try await DirectoryContainer(directory: try #require(FileURL(url: folder)))
         let publication = try await openEPUB(in: container, httpClient: DefaultHTTPClient())
@@ -63,6 +64,10 @@ private final class OpenReader: EPUBNavigatorDelegate {
         try #require(publication.readingOrder.map(\.href) == [
             "OEBPS/text/cover.xhtml", "OEBPS/text/chapter-1.xhtml", "OEBPS/text/chapter-2.xhtml", "OEBPS/text/chapter-3.xhtml",
         ])
+        try await self.init(publication: publication)
+    }
+
+    init(publication: Publication) async throws {
         let spine = try #require(await CFIBridge.spine(of: publication))
         navigator = try EPUBNavigatorViewController(publication: publication, initialLocation: nil)
         // Pages are only laid out in a window that belongs to the host app's scene.

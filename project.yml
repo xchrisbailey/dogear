@@ -30,7 +30,8 @@ targets:
     sources:
       - path: App
         excludes: ["Reader/Resources/**"]
-      # The CFI bridge's scripts, loaded from the app bundle as WKUserScripts.
+      # The CFI bridge's scripts, loaded from the app bundle as WKUserScripts, and the
+      # MOBI, AZW3 and FB2 converter's modules (foliate-js).
       - path: App/Reader/Resources
         buildPhase: resources
     dependencies:
@@ -61,6 +62,9 @@ targets:
       - path: AppTests
         excludes: ["Fixtures/**"]
       - path: AppTests/Fixtures/LighthouseLedger
+        type: folder
+        buildPhase: resources
+      - path: AppTests/Fixtures/Converted
         type: folder
         buildPhase: resources
     dependencies:

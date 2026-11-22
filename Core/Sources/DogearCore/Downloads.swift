@@ -74,7 +74,7 @@ public actor Downloads {
     /// have started; progress shows in `list`.
     public func download(_ file: BookFile, of book: Book) async throws(DownloadError) {
         guard manifest.canDownload else { throw .notAllowed }
-        guard file.isSupported, [.epub, .pdf, .audiobook].contains(file.format) else { throw .notSupported }
+        guard file.isSupported, [.epub, .pdf, .audiobook].contains(file.format) || file.format.isConvertedToEPUB else { throw .notSupported }
         if manifest.entries.contains(where: { $0.bookFileID == file.id }) {
             try await retry(bookFileID: file.id)
             return
@@ -89,6 +89,9 @@ public actor Downloads {
             entry.parts = [Part(url: fileDownload, fileName: "book.epub")]
         case .pdf:
             entry.parts = [Part(url: fileDownload, fileName: "book.pdf")]
+        case .mobi, .azw3, .fb2:
+            // Kept as the Server sends it and converted each time it opens, like a streamed one.
+            entry.parts = [Part(url: fileDownload, fileName: "book.\(file.format.rawValue)")]
         default:
             let info = try await audiobookInfo(bookID: book.id, server: server)
             try write(info.data, to: directory(of: file.id).appending(path: Self.infoName))
@@ -259,6 +262,7 @@ public actor Downloads {
         switch entry.format {
         case .epub: return .epub(folder.appending(path: entry.parts[0].fileName))
         case .pdf: return .pdf(folder.appending(path: entry.parts[0].fileName))
+        case .mobi, .azw3, .fb2: return .convertible(folder.appending(path: entry.parts[0].fileName))
         case .audiobook:
             guard let data = try? Data(contentsOf: folder.appending(path: Self.infoName)),
                   let info = try? JSONDecoder().decode(StoredAudiobookInfo.self, from: data)
@@ -451,6 +455,8 @@ public struct DownloadList: Sendable, Equatable {
 public enum DownloadedBookFile: Sendable {
     case epub(URL)
     case pdf(URL)
+    /// A MOBI, AZW3 or FB2, as the Server sent it; the reader converts it to an EPUB.
+    case convertible(URL)
     case audiobook(DownloadedAudiobook)
 }
 

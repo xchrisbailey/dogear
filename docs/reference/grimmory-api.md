@@ -78,7 +78,7 @@ Source: Grimmory v3.5.0 (`git clone --branch v3.5.0 https://github.com/grimmory-
 ### `GET /api/v1/app/books/{bookId}`
 - `AppBookDetail`: summary fields + metadata, `fileTypes[]`, `files[AppBookFile]`, and the same per-format progress objects as the progress read (`book-detail-*.json`).
 - `AppBookFile {id, bookId, fileName, book, folderBased, bookType, archiveType, fileSizeKb, extension, addedOn, primary}`. `book:false` = supplementary file, ignore. `extension` is absent for folder audiobooks.
-- Unsupported formats: `bookType ∈ {MOBI, AZW3, FB2, CBX}`, or an `AUDIOBOOK` that is Opus (`extension == "opus"`; for folder books check track `fileName`s in the audiobook info). `AZW3` also covers `.azw`.
+- Unsupported formats: `bookType == CBX`, or an `AUDIOBOOK` that is Opus (`extension == "opus"`; for folder books check track `fileName`s in the audiobook info). `MOBI`, `AZW3` (which also covers `.azw`) and `FB2` are converted to EPUB on the device (ADR 0005).
 - 404 `BOOK_NOT_FOUND`; 403 `FORBIDDEN` when outside the account's libraries.
 
 ### Web Book DTO (`GET /api/v1/books/{id}`)
@@ -132,6 +132,11 @@ Source: Grimmory v3.5.0 (`git clone --branch v3.5.0 https://github.com/grimmory-
 ### `GET /api/v1/epub/{bookId}/file/{*filePath}?bookType=`
 - One entry from inside the zip; header or `?token=` auth. Headers: per-entry `Content-Type`, `Content-Length`, `Cache-Control: private, max-age=3600`, `Content-Security-Policy: script-src 'none'` (irrelevant through Readium's scheme handler; matters if these URLs ever load straight into a WKWebView).
 - **No Range** (`Range` → 200 full body, no `Accept-Ranges`). HEAD works. `META-INF/container.xml` 200, **`mimetype` 404**, missing entry → Spring 404.
+
+## MOBI, AZW3, FB2: no `canDownload` check (source only)
+
+- `GET /api/v1/books/{bookId}/content?bookType=MOBI|AZW3|FB2`, as the web reader loads them whole (`frontend/src/app/features/book/service/book-file.service.ts`). No file of that type → 404 `FILE_NOT_FOUND`. Implementation: `Core/Sources/DogearCore/ServerConvertible.swift`.
+- No conversion endpoint exists. Positions are saved and read back as `epubProgress`, the same fields as an EPUB's (`ReadingProgressService`, `case EPUB, FB2, MOBI, AZW3`), and the progress read, like for EPUBs, keeps one per Book.
 
 ## PDF: no `canDownload` check (source only)
 

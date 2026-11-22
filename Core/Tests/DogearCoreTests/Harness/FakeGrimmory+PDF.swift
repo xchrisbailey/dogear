@@ -1,6 +1,6 @@
 import Foundation
 
-/// The fake Server's book content endpoint, which the web reader loads PDFs from.
+/// The fake Server's book content endpoint, which the web reader loads PDFs, MOBIs, AZW3s and FB2s from.
 extension FakeGrimmory {
     static func content(_ request: Request, state: State) -> FakeServer.Reply? {
         let parts = request.path.split(separator: "/").map(String.init)
@@ -15,10 +15,23 @@ extension FakeGrimmory {
             return fixture("error-404-book", status: 404)
         }
         let primary = book.detailJSON["primaryFileType"] as? String
-        guard (request.query["bookType"] ?? primary) == "PDF" else {
+        let requested = request.query["bookType"] ?? primary
+        let files = book.detailJSON["files"] as? [[String: Any]] ?? []
+        if let requested, ["MOBI", "AZW3", "FB2"].contains(requested) {
+            guard files.contains(where: { $0["bookType"] as? String == requested }) else {
+                return fixture("error-404-book", status: 404)
+            }
+            return .response(status: 200, body: contentBytes(bookID: bookID, bookType: requested), contentType: "application/octet-stream")
+        }
+        guard requested == "PDF" else {
             return .response(status: 200, body: Data("not a pdf".utf8), contentType: "application/epub+zip")
         }
         return .response(status: 200, body: pdfBytes(bookID: bookID), contentType: "application/pdf")
+    }
+
+    /// Stand-in MOBI, AZW3 or FB2 bytes, distinct per Book and format.
+    static func contentBytes(bookID: Int, bookType: String) -> Data {
+        Data("\(bookType) book \(bookID)".utf8)
     }
 
     /// Stand-in PDF bytes, distinct per Book.

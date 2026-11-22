@@ -262,8 +262,8 @@ private struct LibraryClient {
     /// Grimmory files Opus under AUDIOBOOK. A folder audiobook's own extension is absent, so its Tracks are checked.
     private func isSupported(_ file: Detail.File, format: BookFile.Format, bookID: Int) async throws(RequestError) -> Bool {
         switch format {
-        case .epub, .pdf: return true
-        case .mobi, .azw3, .fb2, .comic, .other: return false
+        case .epub, .pdf, .mobi, .azw3, .fb2: return true
+        case .comic, .other: return false
         case .audiobook:
             if file.folderBased == true {
                 let info = try await get(AudiobookInfo.self, "audiobooks/\(bookID)/info", query: ["bookType": "AUDIOBOOK"])

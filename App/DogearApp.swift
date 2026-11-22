@@ -86,13 +86,26 @@ final class AppModel {
         await downloads?.remove(bookFileID: file.id)
     }
 
-    /// A reader for the Book's EPUB, from its Download or streamed from the Server. nil when signed out.
+    /// A reader for the Book's EPUB, from its Download or streamed from the Server, or for its
+    /// MOBI, AZW3 or FB2 converted to an EPUB. nil when signed out.
     func epubReader(for book: Book, file: BookFile) async -> EPUBReaderModel? {
         guard let epub = await ServerEPUB(account: account, bookID: book.id) else { return nil }
-        var downloaded: URL?
-        if case let .epub(url)? = await downloads?.downloaded(file) { downloaded = url }
+        let source: EPUBReaderModel.Source
+        switch await downloads?.downloaded(file) {
+        case let .epub(url)?:
+            source = .download(url)
+        case let .convertible(url)?:
+            source = .converted(format: file.format) { try Data(contentsOf: url) }
+        default:
+            if file.format.isConvertedToEPUB {
+                guard let served = await ServerConvertible(account: account, bookID: book.id, format: file.format) else { return nil }
+                source = .converted(format: file.format) { try await served.contents() }
+            } else {
+                source = .server
+            }
+        }
         return EPUBReaderModel(
-            epub: epub, downloaded: downloaded, bookFileID: file.id, positions: positions, sharedPositions: sharedPositions
+            epub: epub, source: source, bookFileID: file.id, positions: positions, sharedPositions: sharedPositions
         )
     }
 
