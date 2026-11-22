@@ -123,17 +123,17 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
             guard let baseURL = HTTPURL(url: epub.baseURL) else { throw OpenError.invalidAddress }
             return try await openEPUB(in: HTTPContainer(client: httpClient, baseURL: baseURL, entries: []), httpClient: httpClient)
         case let .download(file):
-            return try await openEPUB(at: file)
+            return try await openFile(file)
         case let .converted(format, book):
             let data = try await book()
             let file = FileManager.default.temporaryDirectory.appending(path: "\(epub.bookID)-\(UUID().uuidString).epub")
             try await EPUBConverter.epub(from: data, format: format).write(to: file, options: .atomic)
             converted = file
-            return try await openEPUB(at: file)
+            return try await openFile(file)
         }
     }
 
-    private func openEPUB(at file: URL) async throws -> Publication {
+    private func openFile(_ file: URL) async throws -> Publication {
         guard let file = FileURL(url: file) else { throw OpenError.invalidAddress }
         let asset = try await AssetRetriever(httpClient: httpClient).retrieve(url: file, mediaType: .epub).get()
         return try await publicationOpener(httpClient: httpClient).open(asset: asset, allowUserInteraction: false).get()

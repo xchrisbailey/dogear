@@ -40,7 +40,7 @@ struct ReadConvertedTests {
 
         #expect(await ServerConvertible(account: account, bookID: 21, format: .epub) == nil)
         #expect(await ServerConvertible(account: account, bookID: 21, format: .comic) == nil)
-        #expect([BookFile.Format.mobi, .azw3, .fb2].allSatisfy(\.isConvertedToEPUB))
+        #expect([BookFile.Format.mobi, .azw3, .fb2].allSatisfy { $0.isConvertedToEPUB })
         #expect(BookFile.Format.ebooks == [.epub, .azw3, .mobi, .fb2, .pdf])
     }
 
