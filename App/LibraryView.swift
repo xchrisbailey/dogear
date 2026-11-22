@@ -16,8 +16,9 @@ struct LibraryView: View {
     @State private var hasLoaded = false
     @State private var problem: RequestError?
     @State private var reading: OpenBookFile?
-    /// A Book with several formats, waiting for the reader to pick one.
-    @State private var choosingFormat: Book?
+    /// The Book pulled off the shelf to look at its catalog card.
+    @State private var pulled: Book?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var downloadProblem: String?
     @State private var coverColors = CoverColors()
     /// The scroll view's width, which decides how many spines a shelf holds.
@@ -134,15 +135,24 @@ struct LibraryView: View {
         } message: {
             Text(downloadProblem ?? "")
         }
-        .confirmationDialog(
-            "Open",
-            isPresented: Binding { choosingFormat != nil } set: { if !$0 { choosingFormat = nil } },
-            presenting: choosingFormat
-        ) { book in
-            ForEach(Self.openable(book, among: Self.ebookFormats)) { file in
-                Button(file.format.name) { Task { await open(file, of: book) } }
+        // Over the shelves and not in a sheet, so a reader can open straight from the card.
+        .overlay {
+            if let pulled {
+                CatalogCard(
+                    book: pulled, library: library,
+                    throughBook: pulled.throughBook(including: model.recordedPositions),
+                    openable: Self.openable(pulled, among: Self.ebookFormats + [.audiobook]),
+                    downloadProblem: $downloadProblem,
+                    open: { file in
+                        self.pulled = nil
+                        Task { await open(file, of: pulled) }
+                    },
+                    putBack: { self.pulled = nil }
+                )
+                .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .animation(.snappy, value: pulled?.id)
         // The nameplate shows the name; the title stays for the sidebar's back button and VoiceOver.
         .navigationTitle(navigation.name(of: scope))
         // Inline, or the large title would repeat the nameplate above it.
@@ -228,38 +238,26 @@ struct LibraryView: View {
 
     private func spine(_ spine: Spine, of book: Book) -> some View {
         let files = Self.openable(book, among: Self.ebookFormats)
-        return Button {
-            guard let file = files.first else { return }
-            if files.count > 1 {
-                choosingFormat = book
-            } else {
-                Task { await open(file, of: book) }
-            }
-        } label: {
-            BookSpine(
-                book: book, spine: spine, throughBook: book.throughBook(including: model.recordedPositions),
-                download: ShelfDownload(of: book.files.filter { $0.format != .audiobook }, in: model.downloadList),
-                library: library
-            )
-        }
-        .buttonStyle(.plain)
-        .contextMenu { DownloadMenu(book: book, problem: $downloadProblem) }
+        // One format opens; two or none shows the card, to pick or to see why not.
+        var read: (() -> Void)?
+        if files.count == 1 { read = { Task { await open(files[0], of: book) } } }
+        return BookSpine(
+            book: book, spine: spine, throughBook: book.throughBook(including: model.recordedPositions),
+            download: ShelfDownload(of: book.files.filter { $0.format != .audiobook }, in: model.downloadList),
+            library: library
+        )
+        .shelved(open: read) { pulled = book }
     }
 
     private func cassette(_ book: Book) -> some View {
-        let files = Self.openable(book, among: [.audiobook])
-        return Button {
-            guard let file = files.first else { return }
-            Task { await open(file, of: book) }
-        } label: {
-            CassetteCase(
-                book: book, throughBook: book.throughBook(including: model.recordedPositions),
-                download: ShelfDownload(of: book.files.filter { $0.format == .audiobook }, in: model.downloadList),
-                library: library
-            )
-        }
-        .buttonStyle(.plain)
-        .contextMenu { DownloadMenu(book: book, problem: $downloadProblem) }
+        var play: (() -> Void)?
+        if let file = Self.openable(book, among: [.audiobook]).first { play = { Task { await open(file, of: book) } } }
+        return CassetteCase(
+            book: book, throughBook: book.throughBook(including: model.recordedPositions),
+            download: ShelfDownload(of: book.files.filter { $0.format == .audiobook }, in: model.downloadList),
+            library: library
+        )
+        .shelved(open: play) { pulled = book }
     }
 
     /// EPUB first, since it reflows. With both, the reader picks.
@@ -386,7 +384,7 @@ private struct ContinueCard: View {
     }
 }
 
-private struct CoverImage: View {
+struct CoverImage: View {
     let cover: Cover?
     let library: Library
 
@@ -409,5 +407,17 @@ private struct CoverImage: View {
             guard let cover, let data = await library.image(for: cover) else { return }
             image = UIImage(data: data)
         }
+    }
+}
+
+private extension View {
+    /// A Book on a shelf or in the rack: a tap opens it, a long press pulls it out to show its
+    /// catalog card. Without `open`, a tap pulls it out too.
+    func shelved(open: (() -> Void)?, pull: @escaping () -> Void) -> some View {
+        contentShape(.rect)
+            .onTapGesture(perform: open ?? pull)
+            .onLongPressGesture(perform: pull)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(named: "Show Details", pull)
     }
 }
