@@ -72,7 +72,7 @@ struct EPUBReaderView: View {
                 let style = model.turnStyle(in: geometry.size, isWide: horizontalSizeClass == .regular, reduceMotion: reduceMotion)
                 OpenBook(paper: paper, showsPageEdges: style != .none, spineInMiddle: model.showsTwoPages(in: geometry.size, isWide: horizontalSizeClass == .regular)) {
                     VStack(spacing: 0) {
-                        BookPages(navigator: navigator, style: style, toggleControls: model.toggleControls) { model.isTurningPage = $0 }
+                        BookPages(navigator: navigator, style: style, toggleControls: model.toggleControls) { model.pageMoved($0) }
                             // Rotation and spreads resize the page, and Readium reports where it lands.
                             .onGeometryChange(for: CGSize.self, of: \.size) { _ in model.relocated() }
                         Folio(model: model, ink: SwiftUI.Color(hex: paper.ink))

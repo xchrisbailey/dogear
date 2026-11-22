@@ -21,11 +21,7 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     /// back if the page is put down again, so the folio waits for the page.
     private(set) var shownLocation: Locator?
     /// A page is in the air or in the reader's hand.
-    var isTurningPage = false {
-        didSet {
-            if !isTurningPage { shownLocation = location }
-        }
-    }
+    private var isTurningPage = false
     private(set) var tableOfContents: [Link] = []
     /// A problem showing part of the Book file; reading can carry on.
     var problem: String?
@@ -185,6 +181,21 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
         if let cfi = saved.cfi, let bridge, await bridge.go(to: cfi) { return }
         if let locator = await fallbackLocation(for: saved, in: publication) {
             _ = await navigator?.go(to: locator, options: NavigatorGoOptions(animated: false))
+        }
+    }
+
+    /// Follows a page off the book, so the folio changes when the page lands and not before.
+    func pageMoved(_ lift: PageLift) {
+        switch lift {
+        case .lifted:
+            isTurningPage = true
+        case .turned:
+            isTurningPage = false
+            shownLocation = location
+        case .putBack:
+            // Readium may not have reported moving back yet, so `location` can still be the
+            // page that was let go of. The folio already shows the page put back.
+            isTurningPage = false
         }
     }
 
