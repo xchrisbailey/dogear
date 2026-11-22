@@ -4,12 +4,15 @@
 # Signing is cloud-managed: with an App Store Connect API key (Admin role), xcodebuild registers
 # the bundle ID and creates the distribution certificate and profile as needed.
 #
-# Needs: ASC_KEY_ID and ASC_ISSUER_ID in the environment, and the key at
+# Needs: ASC_KEY_ID and ASC_ISSUER_ID (from the environment or ~/.config/dogear/env), and the key at
 # ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8 (override with ASC_KEY_PATH).
 # Usage: scripts/testflight.sh [build-number]   (defaults to a UTC timestamp, always increasing)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+
+# shellcheck source=/dev/null
+[[ -f "${DOGEAR_ENV:-$HOME/.config/dogear/env}" ]] && source "${DOGEAR_ENV:-$HOME/.config/dogear/env}"
 
 : "${ASC_KEY_ID:?set ASC_KEY_ID}"
 : "${ASC_ISSUER_ID:?set ASC_ISSUER_ID}"

@@ -10,11 +10,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  secrets:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: scripts/check-secrets.sh --all
+      - run: scripts/check-architecture.sh
 
   core:
     runs-on: xcode-27
