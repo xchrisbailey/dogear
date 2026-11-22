@@ -22,4 +22,21 @@ struct KeychainTokenStoreTests {
 
         #expect(store.load() == session)
     }
+
+    @Test
+    func savedPasswordLoadsBackAndClears() throws {
+        let store = KeychainPasswordStore(service: "Dogear.tests.\(UUID().uuidString)")
+        defer { store.clear() }
+        let login = SavedLogin(
+            server: try #require(URL(string: "https://books.example")),
+            username: "reader",
+            password: "correct horse"
+        )
+
+        try store.save(login)
+        #expect(store.load() == login)
+
+        store.clear()
+        #expect(store.load() == nil)
+    }
 }

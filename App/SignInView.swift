@@ -42,8 +42,11 @@ struct SignInView: View {
                         .autocorrectionDisabled()
                     SecureField("Password", text: $password)
                         .textContentType(.password)
+                        .submitLabel(.go)
                 } header: {
                     Text("Grimmory account")
+                } footer: {
+                    Text("Your password is kept in this device's Keychain so Dogear can sign in again by itself when your sign-in expires.")
                 }
 
                 if let error {

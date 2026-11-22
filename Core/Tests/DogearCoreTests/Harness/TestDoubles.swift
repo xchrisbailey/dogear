@@ -24,3 +24,14 @@ final class InMemoryTokenStore: TokenStore {
     func save(_ session: Session) throws { stored.withLock { $0 = session } }
     func clear() { stored.withLock { $0 = nil } }
 }
+
+/// Stands in for the Keychain's saved password, like `InMemoryTokenStore`.
+final class InMemoryPasswordStore: PasswordStore {
+    private let stored = Mutex<SavedLogin?>(nil)
+
+    var login: SavedLogin? { stored.withLock { $0 } }
+
+    func load() -> SavedLogin? { login }
+    func save(_ login: SavedLogin) throws { stored.withLock { $0 = login } }
+    func clear() { stored.withLock { $0 = nil } }
+}

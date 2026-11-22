@@ -5,7 +5,7 @@ import SwiftUI
 @main
 struct DogearApp: App {
     @UIApplicationDelegateAdaptor private var appDelegate: AppDelegate
-    @State private var model = AppModel(account: Account(tokenStore: KeychainTokenStore()))
+    @State private var model = AppModel(account: Account(tokenStore: KeychainTokenStore(), passwordStore: KeychainPasswordStore()))
 
     var body: some Scene {
         WindowGroup {
@@ -220,12 +220,6 @@ struct RootView: View {
         Group {
             if let session = model.session {
                 HomeView(session: session, library: model.library, serverStatus: model.serverStatus)
-                    .safeAreaInset(edge: .top, spacing: 0) {
-                        VStack(spacing: 0) {
-                            if session.needsSignIn { NeedsSignInBanner(session: session) }
-                            ServerStatusBanner(status: model.serverStatus)
-                        }
-                    }
             } else if model.hasRestored {
                 SignInView(model: model)
             } else {
