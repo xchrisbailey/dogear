@@ -19,10 +19,17 @@ fi
 
 [[ $# -gt 0 ]] || { echo "usage: $0 <command…> | status" >&2; exit 64; }
 
-runtime="${SIM_RUNTIME:-$(xcrun simctl list runtimes available -j |
-  python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin)["runtimes"] if x["platform"]=="iOS"]; print(r[-1]["identifier"])')}"
-device_type="${SIM_DEVICE_TYPE:-$(xcrun simctl list devicetypes -j |
-  python3 -c 'import json,sys; t=[x for x in json.load(sys.stdin)["devicetypes"] if x["name"].startswith("iPhone") and "Pro" in x["name"] and "Max" not in x["name"]]; print(t[-1]["identifier"])')}"
+# Pick the device type from the runtime's own supported list: the newest device type
+# installed isn't always one the newest runtime can boot.
+read -r runtime device_type < <(xcrun simctl list runtimes available -j | python3 -c '
+import json, os, sys
+runtimes = [r for r in json.load(sys.stdin)["runtimes"] if r["platform"] == "iOS"]
+want = os.environ.get("SIM_RUNTIME")
+runtime = next(r for r in runtimes if r["identifier"] == want) if want else runtimes[-1]
+types = [t for t in runtime["supportedDeviceTypes"] if t["productFamily"] == "iPhone"]
+pros = [t for t in types if "Pro" in t["name"] and "Max" not in t["name"]] or types
+print(runtime["identifier"], os.environ.get("SIM_DEVICE_TYPE") or pros[-1]["identifier"])
+')
 
 name="dogear-$(basename "$PWD")-$$"
 UDID="$(xcrun simctl create "$name" "$device_type" "$runtime")"
