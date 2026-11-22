@@ -80,10 +80,10 @@ struct LibraryView: View {
                 }
                 if showsContinueRows {
                     if kind != .audiobooks, !model.continueRows.reading.isEmpty {
-                        continueShelf("Continue Reading", model.continueRows.reading)
+                        continueShelf("Continue Reading", model.continueRows.reading, height: 176)
                     }
                     if kind != .ebooks, !model.continueRows.listening.isEmpty {
-                        continueShelf("Continue Listening", model.continueRows.listening)
+                        continueShelf("Continue Listening", model.continueRows.listening, height: CassetteFace.size.height + 34)
                     }
                 }
                 if !shelved.isEmpty {
@@ -202,10 +202,11 @@ struct LibraryView: View {
     }
 
     /// The Book files the reader was last in, face out on a shelf of their own.
-    private func continueShelf(_ title: String, _ entries: [ContinueEntry]) -> some View {
+    /// `height` fits what stands on it: covers are taller than cassettes.
+    private func continueShelf(_ title: String, _ entries: [ContinueEntry], height: CGFloat) -> some View {
         VStack(spacing: 10) {
             ShelfLabel(title)
-            BookShelf(height: 176) {
+            BookShelf(height: height) {
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .bottom, spacing: 16) {
                         ForEach(entries) { entry in
