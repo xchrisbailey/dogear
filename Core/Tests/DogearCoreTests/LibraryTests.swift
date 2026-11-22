@@ -49,7 +49,24 @@ struct LibraryTests {
         let books = try await signedInLibrary(on: server).refresh()
 
         let supported = books.map { $0.files.map(\.isSupported) }
-        #expect(supported == [[true, true, false], [false], [false], [false]])
+        // MOBI and AZW3 open converted to an EPUB; Opus audio doesn't play.
+        #expect(supported == [[true, true, true], [true], [false], [false]])
+    }
+
+    @Test func aTapOpensTheEbookThatReflowsBestOrOffersAPDFBesideIt() async throws {
+        let server = FakeGrimmory()
+        server.shelve([FakeGrimmory.mobyDick, FakeGrimmory.allSystemsRed, FakeGrimmory.flatland])
+
+        let books = try await signedInLibrary(on: server).refresh()
+
+        // Moby-Dick's MOBI adds nothing beside its EPUB; All Systems Red has only an AZW3.
+        #expect(books.map { $0.readableFiles.map(\.format) } == [[.epub], [.azw3], [.pdf]])
+        let both = Book(
+            id: 1, title: "Both", authors: [],
+            files: [BookFile(id: 1, format: .pdf, isSupported: true), BookFile(id: 2, format: .fb2, isSupported: true)],
+            primaryFileID: nil, ebookCover: nil, audiobookCover: nil
+        )
+        #expect(both.readableFiles.map(\.id) == [2, 1])
     }
 
     @Test func mp3AndM4BAudiobooksAreSupported() async throws {

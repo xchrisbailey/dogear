@@ -134,9 +134,16 @@ struct DownloadMenu: View {
 
     @Environment(AppModel.self) private var model
 
+    /// The files the card opens, so a MOBI beside an EPUB isn't offered, and any already downloaded.
+    private var files: [BookFile] {
+        let openable = Set((book.readableFiles + book.files.filter { $0.format == .audiobook && $0.isSupported }).map(\.id))
+        return book.files.filter { openable.contains($0.id) || model.downloadList.download(bookFileID: $0.id) != nil }
+    }
+
     var body: some View {
-        ForEach(book.files.filter(\.isSupported)) { file in
-            let name = book.files.filter(\.isSupported).count > 1 ? " \(file.format.name)" : ""
+        let shown = files
+        ForEach(shown) { file in
+            let name = shown.count > 1 ? " \(file.format.name)" : ""
             switch model.downloadList.download(bookFileID: file.id)?.state {
             case nil:
                 if model.downloadList.canDownload {

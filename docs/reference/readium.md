@@ -24,6 +24,15 @@ Implementation: `openPublication()` and `openEPUB(in:httpClient:)` in `App/Reade
 - CFI spine steps index the OPF's element children (all itemrefs), and the prefix is the real path to `<spine>` with `[id]` only where the element has an `id` attribute (foliate builds it with `CFI.fromElements($itemrefs)`: Grimmory `frontend/src/assets/foliate/epub.js` L676, `epubcfi.js` L313). `/6` is only the usual case. Epub info doesn't expose itemref `id`s, so `Core/Sources/DogearCore/EPUBSpine.swift` parses the OPF itself and maps by href, ignoring ID assertions as foliate does when they disagree.
 - The default navigator only paginates `readingOrder`. A custom `readingOrder:` init exists but disables positions and `totalProgression` (`EPUB/EPUBNavigatorViewController.swift` ~L278–300). A CFI into a non-linear item falls back to href/percent (`fallbackLocation` in `EPUBReaderModel.swift`).
 
+## MOBI, AZW3 and FB2, converted (ADR 0005)
+
+Implementation: `App/Reader/EPUBConverter.swift`, `App/Reader/Resources/ebook-to-epub.js`, with foliate-js's `mobi.js`, `fb2.js` and `vendor/fflate.js` at commit 675fdaf (the revision Grimmory ships: identical `mobi.js`, `fb2.js` and `epubcfi.js`).
+
+- The converter's web view is never put on screen. A `WKURLSchemeHandler` (`dogear-convert://`) serves its blank page, the modules and the Book file, so ES module imports and the `fetch` are same-origin.
+- foliate turns each section and resource into a `blob:` URL; `blob-recorder.js` keeps the Blobs so the converter can write them into the EPUB in place of the URLs. MOBI resources come without a type, so they're told apart by their first bytes.
+- Each section keeps the type foliate gave it: KF8 is XHTML (`.xhtml`, `application/xhtml+xml`), MOBI 6 and KF8 that isn't valid XHTML are HTML (`.html`, `text/html`). The same parser then builds the same DOM in Readium as in the web reader's iframe.
+- Table of contents entries and links point at an element's existing `id` where it has one, and otherwise at its section: adding an `id` would change CFIs' ID assertions.
+
 ## CFI bridge in the navigator
 
 Implementation: `App/Reader/CFIBridge.swift`, `App/Reader/Resources/epubcfi.js` (foliate's, from Grimmory v3.5.0, exports exposed as `window.CFI`), `App/Reader/Resources/cfi-bridge.js` (`window.dogearCFI`). Design: ADR 0004.

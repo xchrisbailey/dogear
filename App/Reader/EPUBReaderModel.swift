@@ -6,9 +6,20 @@ import Foundation
 import WebKit
 
 /// Opens a Server EPUB, or its Download, in Readium's navigator, keeps the reader's Position on the device and
-/// shares it with Grimmory's web reader.
+/// shares it with Grimmory's web reader. MOBI, AZW3 and FB2 Book files open here too, converted
+/// to an EPUB first (ADR 0005).
 @Observable
 final class EPUBReaderModel: EPUBNavigatorDelegate {
+    /// Where the EPUB comes from.
+    enum Source {
+        /// Read entry by entry from the Server.
+        case server
+        /// A Download's file.
+        case download(URL)
+        /// A MOBI, AZW3 or FB2 in `format`, made into an EPUB from the bytes `book` gives.
+        case converted(format: BookFile.Format, book: () async throws -> Data)
+    }
+
     enum State {
         case opening
         case reading(EPUBNavigatorViewController)
@@ -37,8 +48,9 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
 
     private let bookFileID: Int
     private let epub: ServerEPUB
-    /// The Download's file; nil streams the EPUB from the Server.
-    private let downloaded: URL?
+    private let source: Source
+    /// A converted EPUB, deleted on close: only Downloads keep Book content on the device.
+    private var converted: URL?
     private let positions: Positions?
     private let sharedPositions: SharedPositions?
     private let signer: EPUBRequestSigner
@@ -56,9 +68,9 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
     private var pushing: Task<Void, Never>?
     private static let pushDelay = Duration.seconds(3)
 
-    init(epub: ServerEPUB, downloaded: URL?, bookFileID: Int, positions: Positions?, sharedPositions: SharedPositions?) {
+    init(epub: ServerEPUB, source: Source, bookFileID: Int, positions: Positions?, sharedPositions: SharedPositions?) {
         self.epub = epub
-        self.downloaded = downloaded
+        self.source = source
         self.bookFileID = bookFileID
         self.positions = positions
         self.sharedPositions = sharedPositions
@@ -89,20 +101,42 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
             navigator.delegate = self
             navigator.addObserver(ReaderInput { [weak self] in self?.moves.readerMoved() })
             state = .reading(navigator)
+        } catch let error as RequestError where error == .forbidden || error == .notFound {
+            state = .failed(error.errorDescription ?? "Couldn't open this Book.")
+        } catch EPUBConverter.Failure.protected {
+            state = .failed("This \(formatName) is locked with DRM by the store it came from, so only that store's apps can open it.")
+        } catch EPUBConverter.Failure.unreadable {
+            state = .failed("Couldn't read this \(formatName). The file may be damaged.")
         } catch {
-            state = .failed("Couldn't open this EPUB. Check your connection and try again.")
+            state = .failed("Couldn't open this \(formatName). Check your connection and try again.")
         }
+    }
+
+    private var formatName: String {
+        if case let .converted(format, _) = source { format.name } else { "EPUB" }
     }
 
     /// Without a Download, reads the EPUB entry by entry from the Server, so `canDownload` isn't needed.
     private func openPublication() async throws -> Publication {
-        if let downloaded {
-            guard let file = FileURL(url: downloaded) else { throw OpenError.invalidAddress }
-            let asset = try await AssetRetriever(httpClient: httpClient).retrieve(url: file, mediaType: .epub).get()
-            return try await publicationOpener(httpClient: httpClient).open(asset: asset, allowUserInteraction: false).get()
+        switch source {
+        case .server:
+            guard let baseURL = HTTPURL(url: epub.baseURL) else { throw OpenError.invalidAddress }
+            return try await openEPUB(in: HTTPContainer(client: httpClient, baseURL: baseURL, entries: []), httpClient: httpClient)
+        case let .download(file):
+            return try await openFile(file)
+        case let .converted(format, book):
+            let data = try await book()
+            let file = FileManager.default.temporaryDirectory.appending(path: "\(epub.bookID)-\(UUID().uuidString).epub")
+            try await EPUBConverter.epub(from: data, format: format).write(to: file, options: .atomic)
+            converted = file
+            return try await openFile(file)
         }
-        guard let baseURL = HTTPURL(url: epub.baseURL) else { throw OpenError.invalidAddress }
-        return try await openEPUB(in: HTTPContainer(client: httpClient, baseURL: baseURL, entries: []), httpClient: httpClient)
+    }
+
+    private func openFile(_ file: URL) async throws -> Publication {
+        guard let file = FileURL(url: file) else { throw OpenError.invalidAddress }
+        let asset = try await AssetRetriever(httpClient: httpClient).retrieve(url: file, mediaType: .epub).get()
+        return try await publicationOpener(httpClient: httpClient).open(asset: asset, allowUserInteraction: false).get()
     }
 
     /// Where to start: the newer of this device's Position and the Shared position (ADR 0002).
@@ -269,6 +303,8 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
 
     /// Pushes the last page read now rather than after the delay. Failures stay in the Outbox.
     func close() async {
+        if let converted { try? FileManager.default.removeItem(at: converted) }
+        converted = nil
         pushing?.cancel()
         await recorder.finished()
         guard let positions, let sharedPositions else { return }

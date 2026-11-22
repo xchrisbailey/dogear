@@ -48,7 +48,7 @@ struct ServerContinueRows: Codable, Sendable {
         /// Preferred first: EPUB reflows, so it beats a PDF of the same Book.
         var formats: [BookFile.Format] {
             switch self {
-            case .ebook: [.epub, .pdf]
+            case .ebook: BookFile.Format.ebooks
             case .audiobook: [.audiobook]
             }
         }

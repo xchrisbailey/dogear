@@ -79,6 +79,23 @@ struct ContinueRowsTests {
         #expect(rows.listening.first?.position?.location == audiobook)
     }
 
+    @Test func convertedBooksContinueLikeEPUBs() async throws {
+        server.holdContinue(.reading, [(14, "2026-11-19T15:34:09Z")])
+        let library = try await signedInLibrary()
+        _ = try await library.refresh()
+        let reading = try positions()
+
+        #expect(titles(await library.continueRows(including: []).reading) == ["14/14"])
+
+        // Read on this device, an AZW3's Position is an EPUB one.
+        let spot = Position.Location.epub(EPUBLocation(href: "section-3.xhtml", throughChapter: 0.5, throughBook: 0.4, cfi: "epubcfi(/6/8!/4/2/1:0)"))
+        try await reading.record(spot, bookFileID: 14, bookID: 14)
+
+        let rows = await library.continueRows(including: await reading.all())
+        #expect(titles(rows.reading) == ["14/14"])
+        #expect(rows.reading.first?.position?.location == spot)
+    }
+
     @Test func bookFinishedOnThisDeviceLeavesContinueReading() async throws {
         server.holdContinue(.reading, [(4, "2026-11-19T15:34:09Z")])
         let library = try await signedInLibrary()

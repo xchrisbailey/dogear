@@ -152,7 +152,7 @@ struct LibraryView: View {
                 CatalogCard(
                     book: pulled, library: library,
                     throughBook: pulled.throughBook(including: model.recordedPositions),
-                    openable: Self.openable(pulled, among: Self.ebookFormats + [.audiobook]),
+                    openable: pulled.readableFiles + Self.openable(pulled, among: [.audiobook]),
                     downloadProblem: $downloadProblem,
                     open: { file in
                         self.pulled = nil
@@ -257,7 +257,7 @@ struct LibraryView: View {
     }
 
     private func spine(_ spine: Spine, of book: Book, _ shelving: ShelvingLookup) -> some View {
-        let files = Self.openable(book, among: Self.ebookFormats)
+        let files = book.readableFiles
         // One format opens; two or none shows the card, to pick or to see why not.
         var read: (() -> Void)?
         if files.count == 1 { read = { Task { await open(files[0], of: book) } } }
@@ -288,9 +288,6 @@ struct LibraryView: View {
         CatalogCardTip().invalidate(reason: .actionPerformed)
     }
 
-    /// EPUB first, since it reflows. With both, the reader picks.
-    private static let ebookFormats: [BookFile.Format] = [.epub, .pdf]
-
     /// The Book files a tap can open, one per format in `formats`' order.
     private static func openable(_ book: Book, among formats: [BookFile.Format]) -> [BookFile] {
         let supported = book.files.filter(\.isSupported)
@@ -304,7 +301,7 @@ struct LibraryView: View {
             return
         }
         let reader: OpenBookFile.Reader? = switch file.format {
-        case .epub: await model.epubReader(for: book, file: file).map(OpenBookFile.Reader.epub)
+        case .epub, .mobi, .azw3, .fb2: await model.epubReader(for: book, file: file).map(OpenBookFile.Reader.epub)
         case .pdf: await model.pdfReader(for: book, file: file).map(OpenBookFile.Reader.pdf)
         default: nil
         }

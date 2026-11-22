@@ -52,6 +52,17 @@ public struct Book: Codable, Sendable, Equatable, Identifiable {
         }
     }
 
+    /// The ebook files a tap can open: the one that reflows best, in `BookFile.Format.ebooks`
+    /// order, and a PDF, whose fixed pages a reader may want instead. A MOBI beside an EPUB of
+    /// the same Book adds nothing, so it isn't offered.
+    public var readableFiles: [BookFile] {
+        let supported = files.filter(\.isSupported)
+        let reflowing = BookFile.Format.ebooks.filter { $0 != .pdf }.lazy
+            .compactMap { format in supported.first { $0.format == format } }.first
+        let pdf = supported.first { $0.format == .pdf }
+        return [reflowing, pdf].compactMap(\.self)
+    }
+
     /// Ignores case and accents, so "bronte" finds "Brontë".
     func matches(_ word: String) -> Bool {
         ([title] + authors).contains { $0.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
@@ -71,7 +82,7 @@ public struct BookFile: Codable, Sendable, Equatable, Identifiable {
 
     public var id: Int
     public var format: Format
-    /// False for formats Dogear can't open (MOBI, AZW, AZW3, FB2, comics, Opus audio).
+    /// False for formats Dogear can't open (comics, Opus audio, and anything Grimmory doesn't name).
     public var isSupported: Bool
     /// The file's size on the Server, in kilobytes. nil for Books cached before sizes were kept.
     public var sizeKB: Int?
@@ -81,6 +92,32 @@ public struct BookFile: Codable, Sendable, Equatable, Identifiable {
         self.format = format
         self.isSupported = isSupported
         self.sizeKB = sizeKB
+    }
+}
+
+extension BookFile.Format {
+    /// Ebook formats, most preferred first, for picking which of a Book's files a tap opens:
+    /// EPUB reflows best, then the formats converted to it, and a PDF last.
+    public static let ebooks: [BookFile.Format] = [.epub, .azw3, .mobi, .fb2, .pdf]
+
+    /// MOBI, AZW3 and FB2 open in the EPUB reader, converted to an EPUB on the device (ADR 0005).
+    /// Their Positions are EPUB Positions, which Grimmory stores the same way for them.
+    public var isConvertedToEPUB: Bool {
+        [.mobi, .azw3, .fb2].contains(self)
+    }
+
+    /// The Server's name for the format, as `bookType` takes it.
+    var bookType: String? {
+        switch self {
+        case .epub: "EPUB"
+        case .pdf: "PDF"
+        case .audiobook: "AUDIOBOOK"
+        case .mobi: "MOBI"
+        case .azw3: "AZW3"
+        case .fb2: "FB2"
+        case .comic: "CBX"
+        case .other: nil
+        }
     }
 }
 

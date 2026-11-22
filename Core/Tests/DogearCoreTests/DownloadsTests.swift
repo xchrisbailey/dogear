@@ -86,6 +86,23 @@ struct DownloadsTests {
         #expect(transport.started.last?.request.value(forHTTPHeaderField: "Authorization") == "Bearer access-2")
     }
 
+    @Test func downloadedMOBIIsKeptAsSentForTheReaderToConvert() async throws {
+        let account = try await signedIn()
+        let (downloads, _) = try await downloads(account)
+        await downloads.checkPermission()
+        let mobyDick = try await book(21, account)
+        let mobi = try #require(mobyDick.files.first { $0.format == .mobi })
+
+        try await downloads.download(mobi, of: mobyDick)
+
+        guard case let .convertible(file)? = await downloads.downloaded(mobi) else {
+            Issue.record("not downloaded")
+            return
+        }
+        #expect(try Data(contentsOf: file) == FakeGrimmory.fileBytes(bookID: 21, fileID: mobi.id))
+        #expect(file.pathExtension == "mobi")
+    }
+
     @Test func downloadedFolderAudiobookPlaysTrackByTrackOfflineAfterARelaunch() async throws {
         let account = try await signedIn()
         let directory = Self.directory()

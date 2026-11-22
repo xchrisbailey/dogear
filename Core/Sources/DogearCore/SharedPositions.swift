@@ -109,7 +109,8 @@ public struct SharedPositions: Sendable {
         /// also moves when another of the Book's files is read.
         func position(_ format: BookFile.Format, bookFileID: Int) -> Position? {
             switch format {
-            case .epub:
+            case .epub, .mobi, .azw3, .fb2:
+                // Grimmory keeps MOBI, AZW3 and FB2 Positions as EPUB ones, and so does Dogear.
                 // The Server keeps it per Book and drops the spot in the Chapter, so `throughChapter` is 0.
                 guard let epub = epubProgress, let href = epub.href,
                       let recordedAt = epub.updatedAt.flatMap(SharedPositions.date)
@@ -138,7 +139,7 @@ public struct SharedPositions: Sendable {
                     throughBook: (audiobook.percentage ?? 0) / 100
                 )
                 return Position(bookFileID: bookFileID, location: .audiobook(location), recordedAt: recordedAt)
-            case .mobi, .azw3, .fb2, .comic, .other:
+            case .comic, .other:
                 // Dogear can't open these, so it never reads or records Positions in them.
                 return nil
             }
