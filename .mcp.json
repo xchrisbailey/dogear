@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "testflight": {
+      "command": "node",
+      "args": ["scripts/testflight-mcp/server.mjs"]
+    }
+  }
+}
