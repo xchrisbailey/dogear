@@ -40,6 +40,8 @@ final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
     private static let upright = CGFloat.pi / 2
     /// Readium has moved once its call returns; the web view paints a frame or two later.
     private static let paintDelay = Duration.milliseconds(60)
+    /// A finger still for this long has stopped, whatever speed it arrived at.
+    private static let rest = 0.1
 
     init(navigator: EPUBNavigatorViewController) {
         self.navigator = navigator
@@ -185,6 +187,8 @@ final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
         }
         let shadow = UIView(frame: view.bounds)
         shadow.backgroundColor = .black
+        // Turning back it lies over the picture while Readium moves, before `set` first runs.
+        shadow.alpha = 0
         shadow.isUserInteractionEnabled = false
         let dimmer = UIView(frame: view.bounds)
         dimmer.backgroundColor = .black
@@ -280,6 +284,9 @@ final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
     private final class Dragging {
         let drag: PageDrag
         var translation: CGFloat
+        /// When the finger last moved. The recognizer still reports the speed of that movement
+        /// after the finger has come to rest.
+        var movedAt = CACurrentMediaTime()
         var flight: Flight?
         var lifting: Task<Void, Never>?
 
@@ -295,12 +302,15 @@ final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
         case .began, .changed:
             if let dragging {
                 dragging.translation = translation
+                dragging.movedAt = CACurrentMediaTime()
                 follow(dragging)
             } else {
                 begin(translation)
             }
         case .ended:
-            release(translation: translation, velocity: pan.velocity(in: view).x, cancelled: false)
+            // A page held still and let go isn't flicked.
+            let rested = dragging.map { CACurrentMediaTime() - $0.movedAt > Self.rest } ?? false
+            release(translation: translation, velocity: rested ? 0 : pan.velocity(in: view).x, cancelled: false)
         case .cancelled, .failed:
             release(translation: translation, velocity: 0, cancelled: true)
         default:

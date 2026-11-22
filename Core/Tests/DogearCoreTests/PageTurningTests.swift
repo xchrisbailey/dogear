@@ -22,6 +22,12 @@ struct PageTurningTests {
         #expect(PageTap(x: 195, width: 390, rightToLeft: true) == .controls)
     }
 
+    @Test func aTapReportedAPageOutCountsWhereItFellOnThePage() {
+        #expect(PageTap(x: 330 - 390, width: 390, rightToLeft: false) == .turn(.forward))
+        #expect(PageTap(x: 40 + 390, width: 390, rightToLeft: false) == .turn(.backward))
+        #expect(PageTap(x: 195 - 780, width: 390, rightToLeft: false) == .controls)
+    }
+
     @Test func aTapBeforeThePageHasASizeTurnsNothing() {
         #expect(PageTap(x: 0, width: 0, rightToLeft: false) == .controls)
     }

@@ -31,13 +31,18 @@ public enum PageTap: Sendable, Equatable {
     /// The outer third of the page turns forward and the third by the spine turns back, as a
     /// thumb on a paper page would. The outer third is a little wider, since forward is what a
     /// reader does most.
+    ///
+    /// The reader places a tap by how far its page has scrolled, so one that lands while a turn
+    /// is moving the page can be reported whole pages to either side. It counts where it fell on
+    /// the page.
     public init(x: Double, width: Double, rightToLeft: Bool) {
         guard width > 0 else {
             self = .controls
             return
         }
+        let across = (x.truncatingRemainder(dividingBy: width) + width).truncatingRemainder(dividingBy: width)
         // Distance from the spine, as a share of the page.
-        let fromSpine = rightToLeft ? 1 - x / width : x / width
+        let fromSpine = rightToLeft ? 1 - across / width : across / width
         self = if fromSpine < 0.28 { .turn(.backward) }
         else if fromSpine > 0.68 { .turn(.forward) }
         else { .controls }

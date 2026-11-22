@@ -39,6 +39,13 @@ extension EPUBPreferences {
     }
 }
 
+extension PDFPreferences {
+    /// A PDF's pages lie straight on the desk, in place of PDFKit's grey.
+    static var onDesk: PDFPreferences {
+        PDFPreferences(backgroundColor: ReadiumNavigator.Color(uiColor: UIColor(Theme.desk[1])))
+    }
+}
+
 /// The dark desk an open Book lies on.
 struct Desk: View {
     var body: some View {

@@ -58,7 +58,7 @@ final class PDFReaderModel: PDFNavigatorDelegate {
             let navigator = try PDFNavigatorViewController(
                 publication: publication,
                 initialLocation: await resumeLocation(in: publication),
-                config: .init(),
+                config: .init(preferences: .onDesk),
                 delegate: self
             )
             pageTurns.bind(to: navigator)
