@@ -17,20 +17,52 @@ jobs:
       - run: scripts/check-secrets.sh --all
       - run: scripts/check-architecture.sh
 
-  core:
-    runs-on: xcode-27
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select newest Xcode
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
-      - run: swift test --package-path Core
-
+  # Seam 1 and seam 2 share one macOS job: the free plan runs 5 macOS jobs at once
+  # across the account, so one per run keeps parallel PRs out of the queue.
   app:
     runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
       - name: Select newest Xcode
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+        id: xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          echo "version=$(xcodebuild -version | tr -s '\n ' '-' | sed 's/-$//')" >> "$GITHUB_OUTPUT"
+
+      # Build products and package checkouts from the newest main run with the same Xcode
+      # and packages. Main saves after every run; a PR saves only when nothing matched (new
+      # Xcode or packages), so its own reruns are warm. PR caches are invisible to other PRs.
+      - name: Restore build cache
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .build/DD
+            !.build/DD/Logs
+            !.build/DD/Index.noindex
+            Core/.build
+          key: build-${{ steps.xcode.outputs.version }}-${{ hashFiles('project.yml', 'Dogear.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Core/Package.swift') }}-${{ github.sha }}
+          restore-keys: |
+            build-${{ steps.xcode.outputs.version }}-${{ hashFiles('project.yml', 'Dogear.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Core/Package.swift') }}-
+
+      - name: Seam 1 (Core)
+        run: swift test --package-path Core
+
       - run: brew install xcodegen
+      - name: Resolve packages
+        run: scripts/app.sh resolve
       - name: Build and run seam 2 on a throwaway simulator
+        env:
+          XCODEBUILD_EXTRA_ARGS: -showBuildTimingSummary
         run: scripts/app.sh test
+
+      - name: Save build cache
+        if: github.ref == 'refs/heads/main' || steps.cache.outputs.cache-matched-key == ''
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .build/DD
+            !.build/DD/Logs
+            !.build/DD/Index.noindex
+            Core/.build
+          key: ${{ steps.cache.outputs.cache-primary-key }}
