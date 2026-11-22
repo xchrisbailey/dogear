@@ -42,6 +42,12 @@ enum Theme {
     static let tabLetteringPressed = Color(hex: 0xF1E3C8)
     static let stitching = Color(hex: 0xE6C8A0)
     static let tabTray = Color(hex: 0x24140B)
+    /// Controls and marks on the Library that aren't lettering: the tan of the tab lettering.
+    static let accent = tabLettering
+    /// Dark iron, for eyelets.
+    static let iron = Color(hex: 0x5A5652)
+    /// A knot of cream thread, from light top to shaded foot.
+    static let thread = [Color(hex: 0xF4EAD2), Color(hex: 0xE6C8A0), Color(hex: 0x8A6E4E)]
 
     /// Nameplates and covers.
     static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .heavy, design: .serif) }
@@ -114,7 +120,7 @@ struct ShelfLedge: View {
     }
 }
 
-/// A handwritten card in a brass holder, naming a shelf.
+/// A stitched leather tag naming a shelf, lettered like the tabs above it but smaller and in capitals.
 struct ShelfLabel: View {
     let text: String
 
@@ -123,15 +129,26 @@ struct ShelfLabel: View {
     }
 
     var body: some View {
-        Text(text)
-            .font(Theme.label(.subheadline))
-            .foregroundStyle(Theme.ink)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 1)
-            .background(Theme.paper, in: .rect(cornerRadius: 2))
-            .padding(4)
-            .background(LinearGradient(colors: [Theme.brass[1], Theme.brass[2]], startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 3))
-            .shadow(color: .black.opacity(0.6), radius: 1, y: 1)
+        Text(text.uppercased())
+            .font(Theme.stamped(12))
+            .tracking(2)
+            .foregroundStyle(Theme.tabLettering)
+            .shadow(color: .black.opacity(0.5), radius: 0, y: -1)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
+            .background {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(LinearGradient(colors: Theme.tabLeather, startPoint: .top, endPoint: .bottom))
+                    .overlay(alignment: .top) { Color.white.opacity(0.1).frame(height: 1).clipShape(.rect(cornerRadius: 4)) }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 2)
+                    .strokeBorder(Theme.stitching.opacity(0.28), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                    .padding(3)
+                    .accessibilityHidden(true)
+            }
+            .shadow(color: .black.opacity(0.5), radius: 2, y: 2)
+            .accessibilityLabel(text)
             .accessibilityAddTraits(.isHeader)
     }
 }
@@ -244,37 +261,7 @@ struct LeatherTabStyle: ButtonStyle {
     }
 }
 
-/// A brass drawer front that sits pressed in while it's the one chosen.
-struct DrawerButtonStyle: ButtonStyle {
-    let isOn: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        let pressed = isOn || configuration.isPressed
-        configuration.label
-            .font(Theme.label(.subheadline))
-            .foregroundStyle(Theme.ink)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .background {
-                // The drop is the drawer front's own, so the lettering isn't doubled by it.
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(LinearGradient(
-                        colors: pressed ? [Theme.brass[1], Theme.brass[0]] : [Theme.brass[0], Theme.brass[2]],
-                        startPoint: .top, endPoint: .bottom
-                    ))
-                    .shadow(color: .black.opacity(pressed ? 0 : 0.5), radius: 0, y: pressed ? 0 : 3)
-            }
-            .overlay {
-                if pressed {
-                    RoundedRectangle(cornerRadius: 4).strokeBorder(.black.opacity(0.35), lineWidth: 1)
-                }
-            }
-            .offset(y: pressed ? 3 : 0)
-    }
-}
-
-/// A paper tag hung from the shelf by a brass grommet, for notices.
+/// A paper tag hung from the shelf by an iron eyelet, for notices.
 struct PaperTag<Content: View>: View {
     var edge: Color = Theme.inkSoft
     @ViewBuilder var content: Content
@@ -284,7 +271,7 @@ struct PaperTag<Content: View>: View {
             Circle()
                 .fill(Theme.backPanel)
                 .frame(width: 9, height: 9)
-                .overlay { Circle().stroke(Theme.brass[1], lineWidth: 2) }
+                .overlay { Circle().stroke(Theme.iron, lineWidth: 2) }
                 .accessibilityHidden(true)
             content
                 .frame(maxWidth: .infinity, alignment: .leading)

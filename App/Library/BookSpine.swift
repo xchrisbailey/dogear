@@ -34,7 +34,7 @@ enum ShelfDownload: Equatable {
 
 /// A Book standing on the shelf, spine out.
 ///
-/// A ribbon out of the top means it's being read, a brass pin at the foot that it's downloaded,
+/// A ribbon out of the top means it's being read, a knot of thread at the foot that it's downloaded,
 /// and brown paper that Dogear can't open any of its ebook formats.
 struct BookSpine: View {
     let book: Book
@@ -155,7 +155,7 @@ struct BookSpine: View {
             case .downloaded:
                 Circle()
                     .fill(RadialGradient(
-                        colors: [Theme.brass[0], Theme.brass[1], Theme.engraved],
+                        colors: Theme.thread,
                         center: UnitPoint(x: 0.35, y: 0.3), startRadius: 0, endRadius: 5
                     ))
                     .frame(width: 7, height: 7)

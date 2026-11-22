@@ -40,7 +40,7 @@ struct CatalogCard: View {
                         Button("Put Back", systemImage: "xmark", action: putBack)
                             .labelStyle(.iconOnly)
                             .font(.headline)
-                            .foregroundStyle(Theme.gilt)
+                            .foregroundStyle(Theme.accent)
                             .frame(width: 44, height: 44)
                             .background(Theme.backPanel, in: .circle)
                     }
@@ -59,7 +59,7 @@ struct CatalogCard: View {
                                 .buttonStyle(CardKeyStyle())
                         }
                         DownloadMenu(book: book, problem: $downloadProblem)
-                            .buttonStyle(DrawerButtonStyle(isOn: false))
+                            .buttonStyle(LeatherTabStyle(isOn: false))
                     }
                 }
                 .padding(20)
