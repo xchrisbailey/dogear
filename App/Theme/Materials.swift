@@ -36,14 +36,10 @@ enum Theme {
     static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .heavy, design: .serif) }
     /// Lettering stamped on spines. Fixed size: a spine is an object, and VoiceOver reads the Book.
     static func stamped(_ size: CGFloat) -> Font { .system(size: size, weight: .bold, design: .serif) }
-    /// Notes and shelf labels, scaling with Dynamic Type.
-    static func hand(_ size: CGFloat) -> Font { .custom("Noteworthy-Bold", size: size) }
-    /// Marker on cassette faces, fixed like spine lettering.
-    static func marker(_ size: CGFloat) -> Font { .custom("MarkerFelt-Wide", fixedSize: size) }
-    /// Marker on the rack's cassette labels, which are read like a list and scale with Dynamic Type.
-    static func marker(_ size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
-        .custom("MarkerFelt-Wide", size: size, relativeTo: style)
-    }
+    /// Shelf labels, drawer buttons and notes: the system sans, scaling with Dynamic Type.
+    static func label(_ style: Font.TextStyle) -> Font { .system(style, weight: .semibold) }
+    /// Titles on a cassette face, fixed like spine lettering.
+    static func cassetteLabel(_ size: CGFloat) -> Font { .system(size: size, weight: .bold) }
 }
 
 extension Color {
@@ -101,7 +97,7 @@ struct ShelfLabel: View {
 
     var body: some View {
         Text(text)
-            .font(Theme.hand(14))
+            .font(Theme.label(.subheadline))
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 12)
             .padding(.vertical, 1)
@@ -161,7 +157,7 @@ struct DrawerButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let pressed = isOn || configuration.isPressed
         configuration.label
-            .font(Theme.hand(15))
+            .font(Theme.label(.subheadline))
             .foregroundStyle(Theme.ink)
             .lineLimit(1)
             .minimumScaleFactor(0.7)

@@ -195,7 +195,7 @@ struct AudiobookPlayerView: View {
     @ViewBuilder private var problemNote: some View {
         if let problem = model.problem {
             Label(problem, systemImage: "exclamationmark.triangle")
-                .font(Theme.hand(14))
+                .font(Theme.label(.subheadline))
                 .foregroundStyle(Theme.ink)
                 .padding(10)
                 .frame(maxWidth: .infinity)
@@ -427,7 +427,7 @@ struct NowPlayingBar: View {
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(player.title)
-                            .font(Theme.hand(15))
+                            .font(Theme.label(.subheadline))
                             .foregroundStyle(Theme.pen)
                         if let detail {
                             Text(detail)
@@ -501,7 +501,7 @@ private struct ChaptersView: View {
                 } label: {
                     HStack {
                         Text(chapter.title)
-                            .font(Theme.hand(16))
+                            .font(.body)
                         Spacer()
                         if chapter == model.chapter {
                             Image(systemName: "speaker.wave.2.fill")
@@ -550,7 +550,7 @@ private struct TracksView: View {
                 } label: {
                     HStack {
                         Text(Self.title(track))
-                            .font(Theme.hand(16))
+                            .font(.body)
                         Spacer()
                         if track == model.track {
                             Image(systemName: "speaker.wave.2.fill")
@@ -695,11 +695,11 @@ private struct LoadedCassette: View {
             .padding(.top, 10)
             VStack(alignment: .leading, spacing: 0) {
                 Text(title)
-                    .font(Theme.marker(19))
+                    .font(Theme.cassetteLabel(19))
                     .foregroundStyle(Theme.pen)
                 if let author {
                     Text(author)
-                        .font(.custom("Noteworthy-Light", fixedSize: 13))
+                        .font(.system(size: 13))
                         .foregroundStyle(Theme.inkSoft)
                 }
             }
