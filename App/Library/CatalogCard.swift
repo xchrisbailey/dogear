@@ -24,40 +24,48 @@ struct CatalogCard: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                HStack {
-                    Spacer()
-                    Button("Put Back", systemImage: "xmark", action: putBack)
-                        .labelStyle(.iconOnly)
-                        .font(.headline)
-                        .foregroundStyle(Theme.gilt)
-                        .frame(width: 44, height: 44)
-                        .background(Theme.backPanel, in: .circle)
-                }
-                CoverImage(cover: book.cover, library: library)
-                    .frame(height: 220)
-                    .shadow(color: .black.opacity(0.7), radius: 14, x: 8, y: 12)
-                    .rotationEffect(.degrees(-3))
-                    .accessibilityHidden(true)
-                card
-                VStack(spacing: 12) {
-                    ForEach(openable) { file in
-                        Button(file.format == .audiobook ? "Listen" : "Read \(file.format.name)") { open(file) }
-                            .buttonStyle(CardKeyStyle())
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 20) {
+                    HStack {
+                        Spacer()
+                        Button("Put Back", systemImage: "xmark", action: putBack)
+                            .labelStyle(.iconOnly)
+                            .font(.headline)
+                            .foregroundStyle(Theme.gilt)
+                            .frame(width: 44, height: 44)
+                            .background(Theme.backPanel, in: .circle)
                     }
-                    DownloadMenu(book: book, problem: $downloadProblem)
-                        .buttonStyle(DrawerButtonStyle(isOn: false))
+                    CoverImage(cover: book.cover, library: library)
+                        .frame(height: 220)
+                        .shadow(color: .black.opacity(0.7), radius: 14, x: 8, y: 12)
+                        .rotationEffect(.degrees(-3))
+                        .accessibilityHidden(true)
+                        // The cover and the card are the Book in hand; only a tap beside them puts it back.
+                        .onTapGesture {}
+                    card
+                        .onTapGesture {}
+                    VStack(spacing: 12) {
+                        ForEach(openable) { file in
+                            Button(file.format == .audiobook ? "Listen" : "Read \(file.format.name)") { open(file) }
+                                .buttonStyle(CardKeyStyle())
+                        }
+                        DownloadMenu(book: book, problem: $downloadProblem)
+                            .buttonStyle(DrawerButtonStyle(isOn: false))
+                    }
                 }
+                .padding(20)
+                .frame(maxWidth: 520)
+                // Fills the screen so a tap anywhere beside the Book lands here: a scroll view takes
+                // the touches a view behind it would have had.
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+                .contentShape(.rect)
+                .onTapGesture(perform: putBack)
             }
-            .padding(20)
-            .frame(maxWidth: 520)
-            .frame(maxWidth: .infinity)
         }
         .background {
             WoodBackground()
                 .opacity(0.97)
-                .onTapGesture(perform: putBack)
                 .accessibilityHidden(true)
         }
         .accessibilityAddTraits(.isModal)

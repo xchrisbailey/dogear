@@ -409,6 +409,7 @@ private struct ChaptersView: View {
             .scrollContentBackground(.hidden)
             .background(Theme.paper)
             .environment(\.colorScheme, .light)
+            .tint(Deck.orange)
             .navigationTitle("Chapters")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -457,6 +458,7 @@ private struct TracksView: View {
             .scrollContentBackground(.hidden)
             .background(Theme.paper)
             .environment(\.colorScheme, .light)
+            .tint(Deck.orange)
             .navigationTitle("Tracks")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

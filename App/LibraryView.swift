@@ -153,6 +153,8 @@ struct LibraryView: View {
             }
         }
         .animation(.snappy, value: pulled?.id)
+        // The card covers the shelves, so their bars would only sit on top of it.
+        .toolbarVisibility(pulled == nil ? .automatic : .hidden, for: .navigationBar, .bottomBar)
         // The nameplate shows the name; the title stays for the sidebar's back button and VoiceOver.
         .navigationTitle(navigation.name(of: scope))
         // Inline, or the large title would repeat the nameplate above it.
