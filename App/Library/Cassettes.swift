@@ -28,7 +28,7 @@ struct CassetteCase: View {
             Spacer(minLength: 0)
             if let throughBook {
                 Text(throughBook.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.custom("Noteworthy-Bold", size: 11, relativeTo: .caption2))
+                    .font(.system(.caption2, weight: .bold))
                     .foregroundStyle(Theme.ribbon)
                     .padding(.horizontal, 5)
                     .overlay { Capsule().strokeBorder(Theme.ribbon, lineWidth: 1.5) }
@@ -65,7 +65,7 @@ struct CassetteCase: View {
 
     private var title: some View {
         Text(Spine.title(for: book.title))
-            .font(Theme.marker(15, relativeTo: .body))
+            .font(Theme.label(.subheadline))
             .foregroundStyle(Theme.pen)
             .lineLimit(1)
     }
@@ -73,7 +73,7 @@ struct CassetteCase: View {
     @ViewBuilder private var author: some View {
         if let author = book.authors.first {
             Text(author)
-                .font(.custom("Noteworthy-Light", size: 12, relativeTo: .caption))
+                .font(.caption)
                 .foregroundStyle(Theme.inkSoft)
                 .lineLimit(1)
                 .fixedSize()
@@ -129,10 +129,10 @@ struct CassetteFace: View {
             .padding(.top, 8)
             VStack(alignment: .leading, spacing: 0) {
                 Text(title)
-                    .font(Theme.marker(12))
+                    .font(Theme.cassetteLabel(12))
                     .foregroundStyle(Theme.pen)
                 Text(throughBook.formatted(.percent.precision(.fractionLength(0))))
-                    .font(.custom("Noteworthy-Bold", fixedSize: 10))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(Theme.inkSoft)
             }
             .lineLimit(1)

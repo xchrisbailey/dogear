@@ -422,7 +422,7 @@ private struct ContinueCard: View {
                     .overlay(alignment: .topTrailing) {
                         if let throughBook {
                             Text(throughBook.formatted(.percent.precision(.fractionLength(0))))
-                                .font(.custom("Noteworthy-Bold", fixedSize: 11))
+                                .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(Theme.ink)
                                 .padding(.horizontal, 4)
                                 .padding(.top, 2)

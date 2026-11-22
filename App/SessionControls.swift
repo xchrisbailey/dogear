@@ -79,7 +79,7 @@ struct NoticeBanner<Action: View>: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(Theme.hand(15))
+                        .font(Theme.label(.subheadline))
                         .foregroundStyle(Theme.ink)
                     Text(message)
                         .font(.footnote)

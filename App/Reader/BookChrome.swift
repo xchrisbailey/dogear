@@ -187,7 +187,7 @@ struct PaperSlip: View {
     var body: some View {
         Button(action: dismiss) {
             Label(text, systemImage: "wifi.exclamationmark")
-                .font(Theme.hand(14))
+                .font(Theme.label(.subheadline))
                 .foregroundStyle(Theme.ink)
                 .padding(.vertical, 8)
                 .padding(.horizontal, 12)
