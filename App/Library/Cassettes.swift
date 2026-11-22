@@ -167,7 +167,7 @@ struct CassetteFace: View {
 }
 
 /// The raised section at the bottom of a cassette shell, wider at the base.
-private struct CassetteFoot: Shape {
+private nonisolated struct CassetteFoot: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.move(to: CGPoint(x: rect.minX + rect.width * 0.08, y: rect.minY))

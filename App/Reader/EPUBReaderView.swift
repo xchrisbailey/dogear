@@ -176,9 +176,9 @@ private struct ReadingSettingsView: View {
                     )
                 }
                 Picker("Theme", selection: Binding { preferences.theme ?? .light } set: { preferences.theme = $0 }) {
-                    Text("Light").tag(Theme.light)
-                    Text("Sepia").tag(Theme.sepia)
-                    Text("Dark").tag(Theme.dark)
+                    Text("Light").tag(ReadiumNavigator.Theme.light)
+                    Text("Sepia").tag(ReadiumNavigator.Theme.sepia)
+                    Text("Dark").tag(ReadiumNavigator.Theme.dark)
                 }
                 .pickerStyle(.segmented)
                 LabeledContent("Margins") {

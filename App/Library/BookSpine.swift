@@ -199,7 +199,7 @@ private struct Bands: View {
 }
 
 /// A ribbon bookmark with a swallowtail end.
-struct Ribbon: Shape {
+nonisolated struct Ribbon: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.minY))
