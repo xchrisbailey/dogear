@@ -19,6 +19,10 @@ fi
 
 [[ $# -gt 0 ]] || { echo "usage: $0 <command…> | status" >&2; exit 64; }
 
+# APP_VERBOSE=1 narrates each stage, so a timestamped log shows which one is slow.
+note() { [[ -z "${APP_VERBOSE:-}" ]] || echo "with-simulator: $*" >&2; }
+
+note "listing runtimes"
 # Pick the device type from the runtime's own supported list: the newest device type
 # installed isn't always one the newest runtime can boot.
 read -r runtime device_type < <(xcrun simctl list runtimes available -j | python3 -c '
@@ -32,6 +36,7 @@ print(runtime["identifier"], os.environ.get("SIM_DEVICE_TYPE") or pros[-1]["iden
 ')
 
 name="dogear-$(basename "$PWD")-$$"
+note "creating $device_type on $runtime"
 UDID="$(xcrun simctl create "$name" "$device_type" "$runtime")"
 export UDID
 
@@ -41,5 +46,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+note "booting $UDID"
 xcrun simctl boot "$UDID"
+if [[ -n "${APP_VERBOSE:-}" ]]; then
+  # Blocks until the device finishes booting and prints what it's waiting on.
+  xcrun simctl bootstatus "$UDID" >&2
+fi
+note "booted, running the command"
 "$@"

@@ -12,6 +12,7 @@ action="${1:-}"
   { echo "usage: $0 build|test|resolve" >&2; exit 64; }
 
 # The Nix xcodegen wrapper only finds its bundled resources through its resolved path.
+[[ -z "${APP_VERBOSE:-}" ]] || echo "app.sh: generating the project" >&2
 "$(readlink -f "$(command -v xcodegen)")" generate --quiet
 
 # Same place the build below looks for checkouts (<derivedDataPath>/SourcePackages).

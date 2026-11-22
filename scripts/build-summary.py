@@ -47,7 +47,10 @@ def report(path):
     print("\nMilestones:")
     seen = set()
     for at, text in rows:
+        if text.startswith(("with-simulator: ", "app.sh: ")):
+            print(f"  {at:7.1f}s  {text}")
         for name, needle in (
+            ("xcodebuild's first line", "Command line invocation"),
             ("first build task", "(in target '"),
             ("first test starts", "◇ "),
             ("tests finished", "Test run with"),
@@ -59,6 +62,7 @@ def report(path):
     print(f"  {rows[-1][0]:7.1f}s  last line")
 
     print("\nLongest silences (seconds, then the lines on either side):")
+    rows = [(0.0, "(start)")] + rows
     gaps = sorted(
         ((b[0] - a[0], a, b) for a, b in zip(rows, rows[1:])), key=lambda g: -g[0]
     )[:12]
