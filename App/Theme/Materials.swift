@@ -24,6 +24,13 @@ enum Theme {
     static let glow = Color(hex: 0x8EF0C1)
     static let cassetteShell = [Color(hex: 0x2B2B2E), Color(hex: 0x18181A)]
     static let tape = Color(hex: 0x4A2E1C)
+    /// The desk an open Book lies on, lit from above its middle.
+    static let desk = [Color(hex: 0x3A2314), Color(hex: 0x170D07)]
+    static let coverBoard = Color(hex: 0x5A1418)
+    static let leather = [Color(hex: 0x3D0E12), Color(hex: 0x5A1418)]
+    /// Gold foil stamped into leather.
+    static let foil = Color(hex: 0xF1D38A)
+    static let ribbonDark = Color(hex: 0x8C1C1C)
 
     /// Nameplates and covers.
     static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .heavy, design: .serif) }

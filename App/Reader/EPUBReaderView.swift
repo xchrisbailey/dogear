@@ -13,74 +13,82 @@ struct EPUBReaderView: View {
     @State private var isShowingContents = false
     @State private var isShowingSettings = false
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        NavigationStack {
+        ZStack(alignment: .top) {
+            Desk()
             content
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar(model.isShowingControls ? .visible : .hidden, for: .navigationBar)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Close", systemImage: "xmark") { dismiss() }
-                    }
-                    ToolbarItemGroup(placement: .primaryAction) {
+            if showsBar {
+                VStack(spacing: 0) {
+                    LeatherBar(title: title) { dismiss() } actions: {
                         Button("Contents", systemImage: "list.bullet") { isShowingContents = true }
                             .disabled(model.tableOfContents.isEmpty)
                         Button("Reading Settings", systemImage: "textformat.size") { isShowingSettings = true }
                     }
+                    if let problem = model.problem {
+                        PaperSlip(text: problem) { model.problem = nil }
+                    }
                 }
-                .sheet(isPresented: $isShowingContents) {
-                    ContentsView(tableOfContents: model.tableOfContents) { await model.go(to: $0) }
-                }
-                .sheet(isPresented: $isShowingSettings) {
-                    ReadingSettingsView(preferences: $model.preferences)
-                        .presentationDetents([.medium, .large])
-                }
-                .task { await model.open() }
-                .onDisappear { Task { await model.close() } }
-                .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { Task { await model.catchUp() } }
-                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: showsBar)
+        .statusBarHidden(!showsBar)
+        .sheet(isPresented: $isShowingContents) {
+            ContentsView(tableOfContents: model.tableOfContents) { await model.go(to: $0) }
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            ReadingSettingsView(preferences: $model.preferences)
+                .presentationDetents([.medium, .large])
+        }
+        .task { await model.open() }
+        .onDisappear { Task { await model.close() } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await model.catchUp() } }
+        }
+    }
+
+    /// The bar lies over the page, so showing it never lays the page out again. It stays while
+    /// there is no page to tap.
+    private var showsBar: Bool {
+        if case .reading = model.state { model.isShowingControls } else { true }
     }
 
     @ViewBuilder private var content: some View {
         switch model.state {
         case .opening:
             ProgressView("Opening…")
+                .tint(Theme.foil)
+                .foregroundStyle(Theme.foil)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         case let .failed(message):
             ContentUnavailableView("Can't open this Book", systemImage: "exclamationmark.triangle", description: Text(message))
+                .environment(\.colorScheme, .dark)
         case let .reading(navigator):
-            NavigatorView(navigator: navigator)
-                // Rotation, spreads and the controls resize the page, and Readium reports where it lands.
-                .onGeometryChange(for: CGSize.self, of: \.size) { _ in model.relocated() }
-                .ignoresSafeArea(edges: .bottom)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    ReadingPosition(model: model)
-                }
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    if let problem = model.problem {
-                        Label(problem, systemImage: "wifi.exclamationmark")
-                            .font(.footnote)
-                            .padding(8)
-                            .frame(maxWidth: .infinity)
-                            .background(.orange.opacity(0.2))
-                            .onTapGesture { model.problem = nil }
+            let paper = ReaderPaper(model.preferences.theme ?? .light)
+            GeometryReader { geometry in
+                let style = model.turnStyle(in: geometry.size, isWide: horizontalSizeClass == .regular, reduceMotion: reduceMotion)
+                OpenBook(paper: paper, showsPageEdges: style != .none) {
+                    VStack(spacing: 0) {
+                        BookPages(navigator: navigator, style: style) { model.toggleControls() }
+                            // Rotation and spreads resize the page, and Readium reports where it lands.
+                            .onGeometryChange(for: CGSize.self, of: \.size) { _ in model.relocated() }
+                        Folio(model: model, ink: SwiftUI.Color(hex: paper.ink))
                     }
                 }
+            }
+            .environment(\.layoutDirection, model.isRightToLeft ? .rightToLeft : .leftToRight)
         }
     }
 }
 
-private struct NavigatorView: UIViewControllerRepresentable {
-    let navigator: EPUBNavigatorViewController
-    func makeUIViewController(context: Context) -> EPUBNavigatorViewController { navigator }
-    func updateUIViewController(_ navigator: EPUBNavigatorViewController, context: Context) {}
-}
-
-/// How far through the Chapter and the whole Book file the reader is.
-private struct ReadingPosition: View {
+/// The line at the foot of the page, like a printed folio: the Chapter, and how far through it
+/// and the whole Book file the reader is.
+private struct Folio: View {
     let model: EPUBReaderModel
+    let ink: SwiftUI.Color
 
     var body: some View {
         let locations = model.location?.locations
@@ -95,11 +103,12 @@ private struct ReadingPosition: View {
                 Text("· \(book.formatted(.percent.precision(.fractionLength(0)))) of book")
             }
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
+        .font(.system(.caption, design: .serif).italic())
+        .foregroundStyle(ink.opacity(0.75))
         .monospacedDigit()
-        .padding(.horizontal)
-        .padding(.vertical, 6)
+        .padding(.leading, 28)
+        .padding(.trailing, 16)
+        .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
     }
 }
