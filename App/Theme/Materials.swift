@@ -33,8 +33,8 @@ enum Theme {
     static let ribbonDark = Color(hex: 0x8C1C1C)
     /// Green linen book cloth, lit from above its middle, for the Library's title board.
     static let bookCloth = [Color(hex: 0x3E5C49), Color(hex: 0x2B4234), Color(hex: 0x243729)]
-    /// Lettering pressed into book cloth without foil: a shade darker than the cloth.
-    static let debossed = Color(hex: 0x172820)
+    /// Cream ink pressed into book cloth: at least 5.8:1 against every shade of the cloth.
+    static let clothInk = Color(hex: 0xEDE3CC)
     /// Tan leather tabs, and the darker one pushed into its tray.
     static let tabLeather = [Color(hex: 0x6A4630), Color(hex: 0x553621)]
     static let tabLeatherPressed = [Color(hex: 0x3A2416), Color(hex: 0x4A2E1C)]
@@ -153,7 +153,7 @@ struct ShelfLabel: View {
     }
 }
 
-/// A board covered in linen book cloth, its title blind-stamped: pressed in, no foil.
+/// A board covered in linen book cloth, its title stamped in cream ink.
 struct ClothBoard: View {
     let title: String
     let subtitle: String
@@ -168,10 +168,9 @@ struct ClothBoard: View {
                 .font(Theme.stamped(11))
                 .tracking(2.5)
         }
-        .foregroundStyle(Theme.debossed)
-        // Pressed in: lit along the lower edge of each letter, shadowed along the upper.
-        .shadow(color: .white.opacity(0.2), radius: 0, y: 1)
-        .shadow(color: .black.opacity(0.5), radius: 0.5, y: -1)
+        .foregroundStyle(Theme.clothInk)
+        // Pressed in: the cloth's edge shades the top of each letter.
+        .shadow(color: .black.opacity(0.55), radius: 0.5, y: -1)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 20)
         .padding(.vertical, 18)
