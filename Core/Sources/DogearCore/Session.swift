@@ -45,3 +45,23 @@ public protocol TokenStore: Sendable {
     func save(_ session: Session) throws
     func clear()
 }
+
+/// The password the reader signed in with, kept so an expired sign-in renews itself instead of
+/// asking them to sign in again.
+public struct SavedLogin: Codable, Sendable, Equatable {
+    public var server: URL
+    public var username: String
+    public var password: String
+
+    public init(server: URL, username: String, password: String) {
+        self.server = server
+        self.username = username
+        self.password = password
+    }
+}
+
+public protocol PasswordStore: Sendable {
+    func load() -> SavedLogin?
+    func save(_ login: SavedLogin) throws
+    func clear()
+}

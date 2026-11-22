@@ -4,6 +4,8 @@ import Foundation
 public actor Account {
     private let urlSession: URLSession
     private let tokenStore: any TokenStore
+    /// nil keeps no password: an expired sign-in then always asks the reader.
+    private let passwordStore: (any PasswordStore)?
     private let clock: any WallClock
     private var refreshing: Task<Result<Session, RequestError>, Never>?
     private var observers: [UUID: AsyncStream<Session?>.Continuation] = [:]
@@ -24,9 +26,13 @@ public actor Account {
         }
     }
 
-    public init(urlSession: URLSession = .shared, tokenStore: any TokenStore, clock: any WallClock = SystemClock()) {
+    public init(
+        urlSession: URLSession = .shared, tokenStore: any TokenStore,
+        passwordStore: (any PasswordStore)? = nil, clock: any WallClock = SystemClock()
+    ) {
         self.urlSession = urlSession
         self.tokenStore = tokenStore
+        self.passwordStore = passwordStore
         self.clock = clock
         session = tokenStore.load()
     }
@@ -58,6 +64,8 @@ public actor Account {
         } catch {
             throw .couldNotSaveSession
         }
+        // Best effort: without it, the reader signs in by hand when the refresh token expires.
+        try? passwordStore?.save(SavedLogin(server: server, username: username, password: password))
         self.session = session
         serverStatus = ServerStatus()
         return session
@@ -66,6 +74,7 @@ public actor Account {
     /// Clears the tokens; the caller warns about a non-empty Outbox first.
     public func signOut() {
         tokenStore.clear()
+        passwordStore?.clear()
         refreshing = nil
         session = nil
         serverStatus = ServerStatus()
@@ -240,7 +249,19 @@ public actor Account {
             updated.refreshToken = tokens.refreshToken
             updated.accessTokenExpiresAt = clock.now().addingTimeInterval(tokens.expires)
         case .failure(.needsSignIn):
-            updated.needsSignIn = true
+            switch await renewWithSavedPassword(stale) {
+            case let .success(tokens):
+                updated.accessToken = tokens.accessToken
+                updated.refreshToken = tokens.refreshToken
+                updated.accessTokenExpiresAt = clock.now().addingTimeInterval(tokens.expires)
+            case .failure(.needsSignIn):
+                updated.needsSignIn = true
+            case let .failure(error):
+                // Offline or rate-limited: try again on the next request.
+                return .failure(error)
+            }
+            // Signed out, or signed in again by hand, while signing in with the saved password.
+            guard self.session?.refreshToken == stale.refreshToken else { return .failure(.signedOut) }
         case let .failure(error):
             if error == .unreachable { serverStatus.isReachable = false }
             if error == .serverChanged { serverStatus.hasChanged = true }
@@ -252,6 +273,36 @@ public actor Account {
         try? tokenStore.save(updated)
         session = updated
         return updated.needsSignIn ? .failure(.needsSignIn) : .success(updated)
+    }
+}
+
+extension Account {
+    /// Signs in again with the saved password after the Server refused the refresh token.
+    /// `.needsSignIn` means the reader must: no password was saved, or it no longer works.
+    fileprivate func renewWithSavedPassword(_ stale: Session) async -> Result<GrimmoryClient.LoginTokens, RequestError> {
+        guard let login = passwordStore?.load(),
+              ServerAddress.isSame(login.server, stale.server), login.username == stale.username
+        else { return .failure(.needsSignIn) }
+        let client = GrimmoryClient(server: stale.server, urlSession: urlSession)
+        do {
+            let tokens = try await client.login(username: login.username, password: login.password)
+            if tokens.isDefaultPassword == true { return .failure(.needsSignIn) }
+            return .success(tokens)
+        } catch .unreachable {
+            serverStatus.isReachable = false
+            return .failure(.unreachable)
+        } catch .rateLimited {
+            return .failure(.rateLimited)
+        } catch .wrongCredentials {
+            // Changed on the Server: forget it so it isn't tried again, and ask the reader.
+            passwordStore?.clear()
+            return .failure(.needsSignIn)
+        } catch .serverChanged {
+            serverStatus.hasChanged = true
+            return .failure(.serverChanged)
+        } catch {
+            return .failure(.needsSignIn)
+        }
     }
 }
 

@@ -1,7 +1,42 @@
 import DogearCore
 import SwiftUI
 
-/// Shown while the Server refuses the refresh token. Local data stays usable offline.
+/// The notices above the library: an expired sign-in, offline mode or a changed Server, and an
+/// untested Grimmory version. Local data stays usable offline whichever is showing.
+struct SessionNotices: View {
+    let session: Session
+    let serverStatus: ServerStatus
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if session.needsSignIn { NeedsSignInBanner(session: session) }
+            if let message = serverStatus.message {
+                NoticeBanner(
+                    title: serverStatus.hasChanged ? "Server has changed" : "Offline",
+                    message: message,
+                    systemImage: serverStatus.hasChanged ? "exclamationmark.arrow.triangle.2.circlepath" : "wifi.slash",
+                    tint: serverStatus.hasChanged ? .red : .secondary
+                )
+            }
+            if let warning = session.versionWarning {
+                NoticeBanner(
+                    title: "Untested Server version",
+                    message: warning.message,
+                    systemImage: "exclamationmark.triangle",
+                    tint: .yellow
+                )
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, hasNotices ? 8 : 0)
+    }
+
+    private var hasNotices: Bool {
+        session.needsSignIn || serverStatus.message != nil || session.versionWarning != nil
+    }
+}
+
+/// Shown while the Server refuses the refresh token and no saved password could renew it.
 struct NeedsSignInBanner: View {
     let session: Session
 
@@ -9,34 +44,57 @@ struct NeedsSignInBanner: View {
     @State private var isSigningIn = false
 
     var body: some View {
-        HStack {
-            Label("Your sign-in has expired. Sign in again to sync.", systemImage: "person.crop.circle.badge.exclamationmark")
-                .font(.footnote)
-            Spacer()
+        NoticeBanner(
+            title: "Sign-in expired",
+            message: "Sign in again to sync your reading progress. Everything on this device still works.",
+            systemImage: "person.crop.circle.badge.exclamationmark",
+            tint: .orange
+        ) {
             Button("Sign In") { isSigningIn = true }
-                .font(.footnote.bold())
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .controlSize(.small)
         }
-        .padding()
-        .background(.orange.opacity(0.2))
         .sheet(isPresented: $isSigningIn) {
             SignInView(model: model, address: session.server.absoluteString, username: session.username)
         }
     }
 }
 
-/// Offline mode, or a Server that has changed under Dogear. Either way the local library and
-/// the Outbox carry on.
-struct ServerStatusBanner: View {
-    let status: ServerStatus
+/// A rounded notice that wraps its text rather than squeezing it, with an optional action.
+struct NoticeBanner<Action: View>: View {
+    let title: String
+    let message: String
+    let systemImage: String
+    let tint: Color
+    @ViewBuilder var action: Action
 
     var body: some View {
-        if let message = status.message {
-            Label(message, systemImage: status.hasChanged ? "exclamationmark.arrow.triangle.2.circlepath" : "wifi.slash")
-                .font(.footnote)
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(status.hasChanged ? Color.red.opacity(0.15) : Color.secondary.opacity(0.15))
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.title3)
+                .foregroundStyle(tint)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline.bold())
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            action
         }
+        .padding(12)
+        .background(tint.opacity(0.15), in: .rect(cornerRadius: 14))
+        .accessibilityElement(children: .contain)
+    }
+}
+
+extension NoticeBanner where Action == EmptyView {
+    init(title: String, message: String, systemImage: String, tint: Color) {
+        self.init(title: title, message: message, systemImage: systemImage, tint: tint) { EmptyView() }
     }
 }
 

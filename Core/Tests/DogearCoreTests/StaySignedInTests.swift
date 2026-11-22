@@ -127,6 +127,61 @@ struct StaySignedInTests {
         #expect(try await account.send(versionRequest).status == 200)
     }
 
+    var loginRequests: [FakeGrimmory.Request] {
+        server.requests.filter { $0.path == "/api/v1/auth/login" }
+    }
+
+    func accountSavingPasswords(_ passwordStore: InMemoryPasswordStore) async throws -> Account {
+        let account = Account(urlSession: server.session, tokenStore: tokenStore, passwordStore: passwordStore, clock: clock)
+        _ = try await account.signIn(address: FakeGrimmory.address, username: "reader", password: "correct horse")
+        return account
+    }
+
+    @Test func signingInSavesThePassword() async throws {
+        let passwords = InMemoryPasswordStore()
+        _ = try await accountSavingPasswords(passwords)
+
+        #expect(passwords.login == SavedLogin(server: URL(string: FakeGrimmory.address)!, username: "reader", password: "correct horse"))
+    }
+
+    @Test func refusedRefreshSignsInAgainWithTheSavedPassword() async throws {
+        let passwords = InMemoryPasswordStore()
+        let account = try await accountSavingPasswords(passwords)
+        server.expireAccessTokens()
+        server.revokeRefreshTokens()
+
+        let (status, _) = try await account.send(versionRequest)
+
+        #expect(status == 200)
+        #expect(loginRequests.count == 2)
+        let renewed = try #require(server.issuedTokens.last)
+        #expect(tokenStore.session?.refreshToken == renewed.refresh)
+        #expect(tokenStore.session?.needsSignIn == false)
+        #expect(server.requests.last?.headers["Authorization"] == "Bearer \(renewed.access)")
+    }
+
+    @Test func passwordChangedOnTheServerAsksToSignInAndForgetsIt() async throws {
+        let passwords = InMemoryPasswordStore()
+        let account = try await accountSavingPasswords(passwords)
+        server.state.withLock { $0.accounts[0].password = "new horse" }
+        server.expireAccessTokens()
+        server.revokeRefreshTokens()
+
+        await #expect(throws: RequestError.needsSignIn) { try await account.send(versionRequest) }
+
+        #expect(await account.session?.needsSignIn == true)
+        #expect(passwords.login == nil)
+    }
+
+    @Test func signingOutForgetsTheSavedPassword() async throws {
+        let passwords = InMemoryPasswordStore()
+        let account = try await accountSavingPasswords(passwords)
+
+        await account.signOut()
+
+        #expect(passwords.login == nil)
+    }
+
     @Test func signingOutForgetsTheTokens() async throws {
         let account = try await signedInAccount()
 

@@ -21,14 +21,7 @@ struct HomeView: View {
             LibrarySidebar(navigation: navigation, scope: $scope)
         } detail: {
             NavigationStack {
-                VStack(spacing: 0) {
-                    if let warning = session.versionWarning {
-                        Label(warning.message, systemImage: "exclamationmark.triangle")
-                            .font(.footnote)
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.yellow.opacity(0.2))
-                    }
+                Group {
                     if let library {
                         LibraryView(
                             library: library,
@@ -44,6 +37,11 @@ struct HomeView: View {
                             description: Text("Dogear couldn't open its storage on this device.")
                         )
                     }
+                }
+                // Inside the NavigationStack so the notices sit below the navigation bar instead
+                // of under its buttons, and stay out of the way of the list's scrolling.
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    SessionNotices(session: session, serverStatus: serverStatus)
                 }
                 .toolbar {
                     OutboxIndicator()
