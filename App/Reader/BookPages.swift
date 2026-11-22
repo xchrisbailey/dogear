@@ -12,6 +12,8 @@ struct BookPages: UIViewControllerRepresentable {
     let navigator: EPUBNavigatorViewController
     let style: PageTurnStyle
     let toggleControls: () -> Void
+    /// Told when a page leaves the book and how it comes down again.
+    let turning: (PageLift) -> Void
 
     func makeUIViewController(context: Context) -> BookPagesController {
         BookPagesController(navigator: navigator)
@@ -20,18 +22,33 @@ struct BookPages: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: BookPagesController, context: Context) {
         controller.style = style
         controller.toggleControls = toggleControls
+        controller.turning = turning
     }
+}
+
+/// What a page off the book has just done.
+enum PageLift {
+    /// It left the book, in a turn or in the reader's hand.
+    case lifted
+    /// It came down on the page turned to.
+    case turned
+    /// It came down where it was.
+    case putBack
 }
 
 final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
     var style = PageTurnStyle.flip
     var toggleControls: () -> Void = {}
+    var turning: (PageLift) -> Void = { _ in }
 
     private let navigator: EPUBNavigatorViewController
     /// The live page, hinged at the spine so it can swing in on a turn back.
     private let page = UIView()
     private var queue = PageTurnQueue()
     private var dragging: Dragging?
+    /// A sideways drag while text is selected. It is taken so Readium's scroll views can't slide
+    /// the page away under the selection, and then does nothing.
+    private var holdsPageStill = false
 
     /// A whole turn by tap or key. Only a quarter turn is ever seen: past upright, the page is
     /// off the spine side of the screen.
@@ -147,10 +164,14 @@ final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
         case .none:
             await move(turn)
         case .fade:
+            turning(.lifted)
             await fade(turn)
+            turning(.turned)
         case .flip:
+            turning(.lifted)
             let flight = await lift(turn)
             await land(flight, complete: true, over: Self.turnTime, curve: .curveEaseInOut)
+            turning(.turned)
         }
     }
 
@@ -297,6 +318,10 @@ final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
     }
 
     @objc private func panned(_ pan: UIPanGestureRecognizer) {
+        guard !holdsPageStill else {
+            if pan.state != .began, pan.state != .changed { holdsPageStill = false }
+            return
+        }
         let translation = pan.translation(in: view).x
         switch pan.state {
         case .began, .changed:
@@ -324,6 +349,7 @@ final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
         else { return }
         let dragging = Dragging(drag: drag, translation: translation)
         self.dragging = dragging
+        turning(.lifted)
         guard style == .flip else { return }
         dragging.lifting = Task {
             dragging.flight = await lift(drag.turn)
@@ -357,23 +383,33 @@ final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
             } else if complete {
                 await fade(drag.turn)
             }
+            // Without a picture there was nothing to put back: Readium moved and stayed.
+            let stayed = style == .flip && dragging.flight == nil
+            turning(complete || stayed ? .turned : .putBack)
             await drain()
         }
     }
 
     // MARK: UIGestureRecognizerDelegate
 
-    /// Only a sideways drag on a paged Book with nothing in the air lifts a page. Anything else
-    /// fails at once and Readium's own gestures carry on.
+    /// Only a sideways drag on a paged Book with nothing in the air begins: it lifts a page, or
+    /// with text selected holds the page where it is. Anything else fails at once and Readium's
+    /// own gestures carry on.
     func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
-        // A drag across selected text is moving the selection's handles.
-        guard style != .none, queue.isIdle, navigator.currentSelection == nil, let pan = recognizer as? UIPanGestureRecognizer else { return false }
+        guard style != .none, queue.isIdle, let pan = recognizer as? UIPanGestureRecognizer else { return false }
         let velocity = pan.velocity(in: view)
-        return abs(velocity.x) > abs(velocity.y)
+        guard abs(velocity.x) > abs(velocity.y) else { return false }
+        holdsPageStill = navigator.currentSelection != nil
+        return true
     }
 
     /// Readium's scroll views would slide the page under the finger; they wait for this to fail.
     func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
         other is UIPanGestureRecognizer && other.view is UIScrollView
+    }
+
+    /// Holding the page still takes nothing from the selection: its handles still drag.
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        holdsPageStill && !(other.view is UIScrollView)
     }
 }

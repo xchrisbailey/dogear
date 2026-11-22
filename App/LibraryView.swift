@@ -160,7 +160,8 @@ struct LibraryView: View {
         // Inline, or the large title would repeat the nameplate above it.
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
-        .searchable(text: $search, prompt: "Title or author")
+        // In the bar, so it leaves with the bar when a Book is pulled and never floats over the rack.
+        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Title or author")
         .overlay {
             Group {
                 if hasLoaded, books.isEmpty, problem == nil {
@@ -233,6 +234,7 @@ struct LibraryView: View {
                     .scrollTargetLayout()
                 }
                 .scrollIndicators(.hidden)
+                .modifier(FadesWhereMoreToCome())
             }
         }
         .padding(.bottom, 18)
@@ -421,5 +423,26 @@ private extension View {
             .onLongPressGesture(perform: pull)
             .accessibilityAddTraits(.isButton)
             .accessibilityAction(named: "Show Details", pull)
+    }
+}
+
+/// Fades out the end of a sideways shelf while more stands beyond it, so what doesn't fit reads
+/// as more to come and not as cut off. With everything in view nothing fades.
+private struct FadesWhereMoreToCome: ViewModifier {
+    @State private var hasMore = false
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.x + geometry.containerSize.width < geometry.contentSize.width - 1
+            } action: { _, hasMore in
+                self.hasMore = hasMore
+            }
+            .mask {
+                LinearGradient(
+                    stops: [.init(color: .black, location: 0.92), .init(color: hasMore ? .clear : .black, location: 1)],
+                    startPoint: .leading, endPoint: .trailing
+                )
+            }
     }
 }

@@ -21,11 +21,15 @@ struct AudiobookPlayerView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                content
-                    .padding(14)
+            GeometryReader { proxy in
+                ScrollView {
+                    content
+                        .padding(14)
+                        // On a tall screen the player sits in the middle, not against the top.
+                        .frame(minHeight: proxy.size.height, alignment: sizeClass == .regular ? .center : .top)
+                }
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .scrollBounceBehavior(.basedOnSize)
             .background {
                 LinearGradient(colors: [Deck.bodyLight, Deck.bodyDark], startPoint: .top, endPoint: .bottom)
                     .ignoresSafeArea()
