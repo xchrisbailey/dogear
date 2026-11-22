@@ -42,6 +42,39 @@ struct ShelvingTests {
         #expect(Set(spines.map(\.fallbackColor)).count == SpineColor.palette.count)
     }
 
+    func book(_ id: Int, files: [BookFile]) -> Book {
+        Book(id: id, title: "Book", authors: [], files: files, primaryFileID: nil, ebookCover: nil, audiobookCover: nil)
+    }
+
+    @Test func aBiggerEbookFileMakesAThickerSpine() {
+        let sizes = [40, 150, 400, 1200, 5000, 30000, 900_000]
+        let spines = sizes.map { Spine(book: book(7, files: [BookFile(id: 1, format: .epub, isSupported: true, sizeKB: $0)])) }
+
+        #expect(zip(spines, spines.dropFirst()).allSatisfy { $0.thickness <= $1.thickness })
+        #expect(spines.first?.thickness == Spine.thicknesses.lowerBound)
+        #expect(spines.last?.thickness == Spine.thicknesses.upperBound)
+        #expect(Set(spines.map(\.thickness)).count >= 5)
+        // Height still comes from the Book, not its file.
+        #expect(Set(spines.map(\.height)).count == 1)
+    }
+
+    @Test func thicknessComesFromTheEbookNotTheAudiobook() {
+        let epub = BookFile(id: 1, format: .epub, isSupported: true, sizeKB: 400)
+        let pdf = BookFile(id: 2, format: .pdf, isSupported: true, sizeKB: 20000)
+        let audiobook = BookFile(id: 3, format: .audiobook, isSupported: true, sizeKB: 640_000)
+        let alone = Spine(book: book(7, files: [epub]))
+
+        #expect(Spine(book: book(7, files: [audiobook, pdf, epub])).thickness == alone.thickness)
+        #expect(Spine(book: book(7, files: [pdf])).thickness > alone.thickness)
+    }
+
+    @Test func aBookOfUnknownSizeKeepsTheThicknessFromItsID() {
+        let unsized = BookFile(id: 1, format: .epub, isSupported: true)
+        let audiobook = BookFile(id: 3, format: .audiobook, isSupported: true, sizeKB: 640_000)
+
+        #expect(Spine(book: book(42, files: [unsized, audiobook])) == Spine(book: book(42, files: [])))
+    }
+
     @Test func thickerSpinesCarryBiggerType() {
         let spines = (1 ... 2000).map { Spine(book: book($0, "Book")) }.sorted { $0.thickness < $1.thickness }
 
