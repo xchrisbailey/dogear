@@ -61,7 +61,8 @@ struct NeedsSignInBanner: View {
     }
 }
 
-/// A rounded notice that wraps its text rather than squeezing it, with an optional action.
+/// A notice on a paper tag that wraps its text rather than squeezing it, with an optional action.
+/// `tint` colors the tag's edge: orange to act, red for trouble, grey for information.
 struct NoticeBanner<Action: View>: View {
     let title: String
     let message: String
@@ -70,24 +71,25 @@ struct NoticeBanner<Action: View>: View {
     @ViewBuilder var action: Action
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.title3)
-                .foregroundStyle(tint)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline.bold())
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        PaperTag(edge: tint) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.title3)
+                    .foregroundStyle(Theme.inkSoft)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(Theme.hand(15))
+                        .foregroundStyle(Theme.ink)
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                action
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            action
         }
-        .padding(12)
-        .background(tint.opacity(0.15), in: .rect(cornerRadius: 14))
         .accessibilityElement(children: .contain)
     }
 }
