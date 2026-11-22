@@ -104,33 +104,6 @@ private struct DownloadRow: View {
     }
 }
 
-/// Shows whether any of a Book's files is downloaded or downloading.
-struct DownloadBadge: View {
-    let book: Book
-
-    @Environment(AppModel.self) private var model
-
-    private var downloads: [Download] {
-        book.files.compactMap { model.downloadList.download(bookFileID: $0.id) }
-    }
-
-    var body: some View {
-        if let downloading = downloads.lazy.compactMap(\.progress).first {
-            ProgressView(value: downloading)
-                .frame(width: 60)
-                .accessibilityLabel("Downloading")
-        } else if downloads.contains(where: { $0.state == .failed }) {
-            Label("Download failed", systemImage: "exclamationmark.triangle")
-                .labelStyle(.iconOnly)
-                .foregroundStyle(.red)
-        } else if !downloads.isEmpty {
-            Label("Downloaded", systemImage: "arrow.down.circle.fill")
-                .labelStyle(.iconOnly)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
 /// Download and remove actions for each of a Book's files. Downloading is hidden when the
 /// account can't; removing never is.
 struct DownloadMenu: View {
@@ -172,11 +145,5 @@ struct DownloadMenu: View {
 
     private func remove(_ file: BookFile) {
         Task { await model.removeDownload(of: file) }
-    }
-}
-
-private extension Download {
-    var progress: Double? {
-        if case let .downloading(progress) = state { progress } else { nil }
     }
 }
