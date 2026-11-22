@@ -74,7 +74,7 @@ struct CatalogCard: View {
             .modifier(PullsDownToClose(close: putBack))
         }
         .background {
-            WoodBackground()
+            FeltBackground()
                 .opacity(0.97)
                 .accessibilityHidden(true)
         }

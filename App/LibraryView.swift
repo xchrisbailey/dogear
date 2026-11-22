@@ -64,12 +64,12 @@ struct LibraryView: View {
         ScrollView {
             // Every shelf and cassette is its own lazy row, so a large library only builds what's on screen.
             LazyVStack(spacing: 0) {
-                Nameplate(title: navigation.name(of: scope), subtitle: books.count == 1 ? "1 Book" : "\(books.count) Books")
+                ClothBoard(title: navigation.name(of: scope), subtitle: books.count == 1 ? "1 Book" : "\(books.count) Books")
                     .padding(.bottom, 16)
-                HStack(spacing: 8) {
+                LeatherTabs {
                     ForEach(BookKind.allCases, id: \.self) { kind in
                         Button(kind.name) { self.kind = kind }
-                            .buttonStyle(DrawerButtonStyle(isOn: self.kind == kind))
+                            .buttonStyle(LeatherTabStyle(isOn: self.kind == kind))
                             .accessibilityAddTraits(self.kind == kind ? .isSelected : [])
                     }
                 }
@@ -139,7 +139,7 @@ struct LibraryView: View {
             .tint(Theme.gilt)
         }
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
-        .background { WoodBackground() }
+        .background { FeltBackground() }
         .toolbarColorScheme(.dark, for: .navigationBar)
         .alert("Couldn't download", isPresented: Binding { downloadProblem != nil } set: { if !$0 { downloadProblem = nil } }) {
             Button("OK") {}

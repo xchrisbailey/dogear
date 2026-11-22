@@ -1,11 +1,11 @@
 import DogearCore
 import SwiftUI
 
-/// The physical look shared by the Library, readers and player: wood, brass, paper and the
+/// The physical look shared by the Library, readers and player: wood, felt, brass, cloth, leather, paper and the
 /// lettering that goes on them. Screens compose these instead of picking their own colors.
 enum Theme {
-    static let walnutLight = Color(hex: 0x45291A)
-    static let walnutDark = Color(hex: 0x2C190E)
+    /// The felt lining behind the bookcase.
+    static let felt = [Color(hex: 0x2F2A26), Color(hex: 0x211D1A)]
     /// The back of the bookcase, behind the spines.
     static let backPanel = Color(hex: 0x1F120A)
     static let ledge = [Color(hex: 0x8A5A36), Color(hex: 0x6B4126), Color(hex: 0x4A2B18)]
@@ -31,6 +31,17 @@ enum Theme {
     /// Gold foil stamped into leather.
     static let foil = Color(hex: 0xF1D38A)
     static let ribbonDark = Color(hex: 0x8C1C1C)
+    /// Green linen book cloth, lit from above its middle, for the Library's title board.
+    static let bookCloth = [Color(hex: 0x3E5C49), Color(hex: 0x2B4234), Color(hex: 0x243729)]
+    /// Lettering pressed into book cloth without foil: a shade darker than the cloth.
+    static let debossed = Color(hex: 0x172820)
+    /// Tan leather tabs, and the darker one pushed into its tray.
+    static let tabLeather = [Color(hex: 0x6A4630), Color(hex: 0x553621)]
+    static let tabLeatherPressed = [Color(hex: 0x3A2416), Color(hex: 0x4A2E1C)]
+    static let tabLettering = Color(hex: 0xC9AE88)
+    static let tabLetteringPressed = Color(hex: 0xF1E3C8)
+    static let stitching = Color(hex: 0xE6C8A0)
+    static let tabTray = Color(hex: 0x24140B)
 
     /// Nameplates and covers.
     static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .heavy, design: .serif) }
@@ -54,24 +65,40 @@ extension Color {
     }
 }
 
-/// Walnut boards with a faint grain.
-struct WoodBackground: View {
+/// Warm charcoal wool behind the shelves, like a drawer lining: quiet, so the Books carry the color.
+struct FeltBackground: View {
     var body: some View {
-        LinearGradient(colors: [Theme.walnutLight, Theme.walnutDark], startPoint: .top, endPoint: .bottom)
+        LinearGradient(colors: Theme.felt, startPoint: .top, endPoint: .bottom)
+            // Light pooled at the top, falling off toward the edges.
             .overlay {
-                Canvas { context, size in
-                    // Evenly spaced hairlines, two rhythms, so it reads as grain and not stripes.
-                    for (step, opacity) in [(CGFloat(9), 0.035), (CGFloat(23), 0.16)] {
-                        var x = step / 2
-                        while x < size.width {
-                            let line = Path(CGRect(x: x, y: 0, width: 1, height: size.height))
-                            context.fill(line, with: .color(opacity > 0.1 ? .black.opacity(opacity) : .white.opacity(opacity)))
-                            x += step
-                        }
-                    }
+                RadialGradient(colors: [.white.opacity(0.05), .clear], center: .top, startRadius: 0, endRadius: 420)
+            }
+            .overlay {
+                EllipticalGradient(colors: [.clear, .black.opacity(0.35)], center: .center, startRadiusFraction: 0.35, endRadiusFraction: 0.75)
+            }
+            .overlay { Fibers() }
+            .ignoresSafeArea()
+            .accessibilityHidden(true)
+    }
+
+    /// Speckle from the wool. Seeded, so it doesn't shimmer when the view redraws.
+    private struct Fibers: View {
+        var body: some View {
+            Canvas { context, size in
+                var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+                func next() -> CGFloat {
+                    seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+                    return CGFloat(seed >> 33) / CGFloat(UInt32.max >> 1)
+                }
+                let count = Int(size.width * size.height / 40)
+                for _ in 0..<count {
+                    let dot = Path(CGRect(x: next() * size.width, y: next() * size.height, width: 1, height: 1))
+                    let light = next() > 0.5
+                    context.fill(dot, with: .color(light ? .white.opacity(0.04) : .black.opacity(0.18)))
                 }
             }
-            .ignoresSafeArea()
+            .drawingGroup()
+        }
     }
 }
 
@@ -109,44 +136,111 @@ struct ShelfLabel: View {
     }
 }
 
-/// An engraved brass plate with a screw at each end.
-struct Nameplate: View {
+/// A board covered in linen book cloth, its title blind-stamped: pressed in, no foil.
+struct ClothBoard: View {
     let title: String
     let subtitle: String
 
     var body: some View {
-        HStack {
-            Screw()
-            VStack(spacing: 2) {
-                Text(title)
-                    .font(Theme.display(28))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                Text(subtitle.uppercased())
-                    .font(Theme.stamped(11))
-                    .tracking(2)
-                    .opacity(0.8)
-            }
-            .foregroundStyle(Theme.engraved)
-            .frame(maxWidth: .infinity)
-            Screw()
+        VStack(spacing: 3) {
+            Text(title)
+                .font(Theme.display(28))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(subtitle.uppercased())
+                .font(Theme.stamped(11))
+                .tracking(2.5)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(LinearGradient(colors: Theme.brass, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
-        .shadow(color: .black.opacity(0.55), radius: 4, y: 3)
+        .foregroundStyle(Theme.debossed)
+        // Pressed in: lit along the lower edge of each letter, shadowed along the upper.
+        .shadow(color: .white.opacity(0.2), radius: 0, y: 1)
+        .shadow(color: .black.opacity(0.5), radius: 0.5, y: -1)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 18)
+        .background {
+            RadialGradient(colors: Theme.bookCloth, center: .top, startRadius: 0, endRadius: 260)
+                .overlay { Linen() }
+                .overlay {
+                    // The blind-stamped border, inset from the board's edge.
+                    RoundedRectangle(cornerRadius: 3)
+                        .strokeBorder(.black.opacity(0.35), lineWidth: 1)
+                        .shadow(color: .white.opacity(0.09), radius: 0, y: 1)
+                        .padding(9)
+                }
+                .overlay(alignment: .top) { Color.white.opacity(0.12).frame(height: 1) }
+                .clipShape(.rect(cornerRadius: 5))
+        }
+        .shadow(color: .black.opacity(0.55), radius: 5, y: 4)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }
 
-    private struct Screw: View {
+    /// The weave: fine light weft over darker warp, too small to read as stripes.
+    private struct Linen: View {
         var body: some View {
-            Circle()
-                .fill(RadialGradient(colors: [.white, Theme.brass[2], Theme.engraved], center: UnitPoint(x: 0.35, y: 0.3), startRadius: 0, endRadius: 5))
-                .frame(width: 8, height: 8)
-                .overlay { Rectangle().fill(.black.opacity(0.5)).frame(width: 6, height: 1).rotationEffect(.degrees(35)) }
-                .accessibilityHidden(true)
+            Canvas { context, size in
+                var y: CGFloat = 0
+                while y < size.height {
+                    context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 1)), with: .color(.white.opacity(0.045)))
+                    y += 3
+                }
+                var x: CGFloat = 0
+                while x < size.width {
+                    context.fill(Path(CGRect(x: x, y: 0, width: 1, height: size.height)), with: .color(.black.opacity(0.12)))
+                    x += 3
+                }
+            }
+            .accessibilityHidden(true)
         }
+    }
+}
+
+/// A row of stitched leather tabs set in a dark tray, for choosing one of a few.
+struct LeatherTabs<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        HStack(spacing: 4) { content }
+            .padding(4)
+            .background {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Theme.tabTray.shadow(.inner(color: .black.opacity(0.6), radius: 3, y: 2)))
+                    .shadow(color: .white.opacity(0.08), radius: 0, y: 1)
+            }
+    }
+}
+
+/// A leather tab in a ``LeatherTabs`` tray that sinks in while it's the one chosen.
+struct LeatherTabStyle: ButtonStyle {
+    let isOn: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = isOn || configuration.isPressed
+        configuration.label
+            .font(Theme.label(.subheadline))
+            .foregroundStyle(pressed ? Theme.tabLetteringPressed : Theme.tabLettering)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background {
+                let shape = RoundedRectangle(cornerRadius: 4)
+                shape
+                    .fill(
+                        LinearGradient(colors: pressed ? Theme.tabLeatherPressed : Theme.tabLeather, startPoint: .top, endPoint: .bottom)
+                            .shadow(.inner(color: .black.opacity(pressed ? 0.65 : 0), radius: 3, y: 3))
+                    )
+                    .overlay(alignment: .top) {
+                        if !pressed { Color.white.opacity(0.12).frame(height: 1).clipShape(shape) }
+                    }
+                    .shadow(color: .black.opacity(pressed ? 0 : 0.4), radius: 1, y: 2)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 3)
+                    .strokeBorder(Theme.stitching.opacity(pressed ? 0.2 : 0.28), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                    .padding(4)
+                    .accessibilityHidden(true)
+            }
     }
 }
 
