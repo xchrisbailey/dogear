@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # labeled: adding seam-2 to a PR reruns CI with the simulator tests.
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
 
@@ -49,12 +51,14 @@ jobs:
         run: swift test --package-path Core
 
       - run: brew install xcodegen
-      - name: Build and run seam 2 on a throwaway simulator
+      # Seam 2 needs a simulator, whose cold boot takes 1.5 to 8 minutes on these runners, so
+      # it runs on main and on PRs labelled seam-2. Other PRs compile the app and its tests.
+      - name: Compile the app and tests, and run seam 2 on main
         shell: bash -eo pipefail {0}
         env:
-          XCODEBUILD_EXTRA_ARGS: -showBuildTimingSummary
           APP_VERBOSE: 1
-        run: scripts/app.sh test 2>&1 | scripts/build-summary.py stamp | tee "$RUNNER_TEMP/build.log"
+          ACTION: ${{ (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'seam-2')) && 'test' || 'compile' }}
+        run: scripts/app.sh "$ACTION" 2>&1 | scripts/build-summary.py stamp | tee "$RUNNER_TEMP/build.log"
 
       # Tasks run per target and the longest silences in the log: where the time went.
       - name: Build summary

@@ -54,7 +54,10 @@ def report(path):
             ("first build task", "(in target '"),
             ("first test starts", "◇ "),
             ("tests finished", "Test run with"),
-            ("xcodebuild done", "** TEST "),
+            ("compile done", "** TEST BUILD "),
+            ("xcodebuild done", "** TEST EXECUTE "),
+            ("xcodebuild done", "** TEST SUCCEEDED"),
+            ("xcodebuild done", "** TEST FAILED"),
         ):
             if name not in seen and needle in text:
                 seen.add(name)
