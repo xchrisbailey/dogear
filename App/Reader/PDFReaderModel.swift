@@ -162,7 +162,19 @@ final class PDFReaderModel: PDFNavigatorDelegate {
     }
 
     func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
+        // Readium reports every tap here, including the ones at the edges that turn the page.
+        guard !turnsPage(tapAt: point, in: navigator) else { return }
         isShowingControls.toggle()
+    }
+
+    /// Whether `pageTurns` takes a tap at `point` to turn the page, by its own policy.
+    private func turnsPage(tapAt point: CGPoint, in navigator: VisualNavigator) -> Bool {
+        let policy = pageTurns.pointerPolicy
+        guard !(policy.ignoreWhileScrolling && navigator.presentation.scroll) else { return false }
+        let width = navigator.view.bounds.width
+        let edge = policy.horizontalEdgeThresholdPercent.map { max(policy.minimumHorizontalEdgeSize, $0 * width) }
+            ?? policy.minimumHorizontalEdgeSize
+        return point.x <= edge || point.x >= width - edge
     }
 
     func navigator(_ navigator: Navigator, presentError error: NavigatorError) {}

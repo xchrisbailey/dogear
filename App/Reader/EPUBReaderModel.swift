@@ -17,6 +17,15 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
 
     private(set) var state: State = .opening
     private(set) var location: Locator?
+    /// The location the folio shows. Readium moves before a turning page has landed, and moves
+    /// back if the page is put down again, so the folio waits for the page.
+    private(set) var shownLocation: Locator?
+    /// A page is in the air or in the reader's hand.
+    var isTurningPage = false {
+        didSet {
+            if !isTurningPage { shownLocation = location }
+        }
+    }
     private(set) var tableOfContents: [Link] = []
     /// A problem showing part of the Book file; reading can carry on.
     var problem: String?
@@ -137,18 +146,22 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
         navigator?.settings.readingProgression == .rtl
     }
 
-    /// How a page turn is shown, for a reader `size` big. Two pages show side by side when asked
-    /// for, or by themselves on a wide, landscape reader.
-    func turnStyle(in size: CGSize, isWide: Bool, reduceMotion: Bool) -> PageTurnStyle {
-        guard let navigator else { return .none }
-        let settings = navigator.settings
-        let sideBySide = switch settings.columnCount {
+    /// Whether a reader `size` big shows two pages with the spine between them.
+    func showsTwoPages(in size: CGSize, isWide: Bool) -> Bool {
+        guard let settings = navigator?.settings, !settings.scroll else { return false }
+        return switch settings.columnCount {
         case .two: true
         case .one: false
         case .auto: isWide && size.width > size.height
         }
+    }
+
+    /// How a page turn is shown, for a reader `size` big. Two pages show side by side when asked
+    /// for, or by themselves on a wide, landscape reader.
+    func turnStyle(in size: CGSize, isWide: Bool, reduceMotion: Bool) -> PageTurnStyle {
+        guard let navigator else { return .none }
         return PageTurnStyle(
-            scrolls: settings.scroll, pagesSideBySide: sideBySide,
+            scrolls: navigator.settings.scroll, pagesSideBySide: showsTwoPages(in: size, isWide: isWide),
             fixedLayout: publication?.metadata.layout == .fixed, reduceMotion: reduceMotion
         )
     }
@@ -177,7 +190,7 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
 
     /// The Chapter the reader is in: the deepest table of contents entry for the current resource.
     var chapterTitle: String? {
-        guard let location else { return nil }
+        guard let location = shownLocation else { return nil }
         func find(_ links: [Link]) -> String? {
             for link in links {
                 if let title = find(link.children) { return title }
@@ -196,6 +209,7 @@ final class EPUBReaderModel: EPUBNavigatorDelegate {
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         location = locator
+        if !isTurningPage { shownLocation = locator }
         bridge?.locationDidChange()
         guard hasLanded else {
             if landing == nil { landing = Task { await land() } }

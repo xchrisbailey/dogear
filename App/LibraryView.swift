@@ -160,7 +160,8 @@ struct LibraryView: View {
         // Inline, or the large title would repeat the nameplate above it.
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
-        .searchable(text: $search, prompt: "Title or author")
+        // In the bar, so it leaves with the bar when a Book is pulled and never floats over the rack.
+        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Title or author")
         .overlay {
             Group {
                 if hasLoaded, books.isEmpty, problem == nil {
@@ -233,6 +234,14 @@ struct LibraryView: View {
                     .scrollTargetLayout()
                 }
                 .scrollIndicators(.hidden)
+                // What doesn't fit fades out at the shelf's end, so it reads as more to come and
+                // not as cut off.
+                .mask {
+                    LinearGradient(
+                        stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.92), .init(color: .clear, location: 1)],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                }
             }
         }
         .padding(.bottom, 18)

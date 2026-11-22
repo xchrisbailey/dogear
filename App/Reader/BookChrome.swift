@@ -62,16 +62,26 @@ struct OpenBook<Page: View>: View {
     let paper: ReaderPaper
     /// A scrolling Book has no stack of pages to show.
     let showsPageEdges: Bool
+    /// Two pages side by side meet at the spine; one page has it at its inner edge.
+    let spineInMiddle: Bool
     @ViewBuilder var page: Page
+
+    /// The shadow where the paper dips into the spine.
+    private var gutter: [Gradient.Stop] {
+        spineInMiddle
+            ? [
+                .init(color: .clear, location: 0.42), .init(color: .black.opacity(0.08), location: 0.47),
+                .init(color: .black.opacity(0.3), location: 0.5),
+                .init(color: .black.opacity(0.08), location: 0.53), .init(color: .clear, location: 0.58),
+            ]
+            : [.init(color: .black.opacity(0.3), location: 0), .init(color: .black.opacity(0.08), location: 0.06), .init(color: .clear, location: 0.16)]
+    }
 
     var body: some View {
         page
             .background(SwiftUI.Color(hex: paper.paper))
             .overlay {
-                LinearGradient(
-                    stops: [.init(color: .black.opacity(0.3), location: 0), .init(color: .black.opacity(0.08), location: 0.06), .init(color: .clear, location: 0.16)],
-                    startPoint: .leading, endPoint: .trailing
-                )
+                LinearGradient(stops: gutter, startPoint: .leading, endPoint: .trailing)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }

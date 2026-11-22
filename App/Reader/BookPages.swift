@@ -12,6 +12,8 @@ struct BookPages: UIViewControllerRepresentable {
     let navigator: EPUBNavigatorViewController
     let style: PageTurnStyle
     let toggleControls: () -> Void
+    /// Told when a page leaves the book and when it has landed or been put back.
+    let turning: (Bool) -> Void
 
     func makeUIViewController(context: Context) -> BookPagesController {
         BookPagesController(navigator: navigator)
@@ -20,12 +22,14 @@ struct BookPages: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: BookPagesController, context: Context) {
         controller.style = style
         controller.toggleControls = toggleControls
+        controller.turning = turning
     }
 }
 
 final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
     var style = PageTurnStyle.flip
     var toggleControls: () -> Void = {}
+    var turning: (Bool) -> Void = { _ in }
 
     private let navigator: EPUBNavigatorViewController
     /// The live page, hinged at the spine so it can swing in on a turn back.
@@ -147,10 +151,14 @@ final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
         case .none:
             await move(turn)
         case .fade:
+            turning(true)
             await fade(turn)
+            turning(false)
         case .flip:
+            turning(true)
             let flight = await lift(turn)
             await land(flight, complete: true, over: Self.turnTime, curve: .curveEaseInOut)
+            turning(false)
         }
     }
 
@@ -324,6 +332,7 @@ final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
         else { return }
         let dragging = Dragging(drag: drag, translation: translation)
         self.dragging = dragging
+        turning(true)
         guard style == .flip else { return }
         dragging.lifting = Task {
             dragging.flight = await lift(drag.turn)
@@ -357,6 +366,7 @@ final class BookPagesController: UIViewController, UIGestureRecognizerDelegate {
             } else if complete {
                 await fade(drag.turn)
             }
+            turning(false)
             await drain()
         }
     }
