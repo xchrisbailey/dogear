@@ -234,14 +234,7 @@ struct LibraryView: View {
                     .scrollTargetLayout()
                 }
                 .scrollIndicators(.hidden)
-                // What doesn't fit fades out at the shelf's end, so it reads as more to come and
-                // not as cut off.
-                .mask {
-                    LinearGradient(
-                        stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.92), .init(color: .clear, location: 1)],
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                }
+                .modifier(FadesWhereMoreToCome())
             }
         }
         .padding(.bottom, 18)
@@ -430,5 +423,26 @@ private extension View {
             .onLongPressGesture(perform: pull)
             .accessibilityAddTraits(.isButton)
             .accessibilityAction(named: "Show Details", pull)
+    }
+}
+
+/// Fades out the end of a sideways shelf while more stands beyond it, so what doesn't fit reads
+/// as more to come and not as cut off. With everything in view nothing fades.
+private struct FadesWhereMoreToCome: ViewModifier {
+    @State private var hasMore = false
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.x + geometry.containerSize.width < geometry.contentSize.width - 1
+            } action: { _, hasMore in
+                self.hasMore = hasMore
+            }
+            .mask {
+                LinearGradient(
+                    stops: [.init(color: .black, location: 0.92), .init(color: hasMore ? .clear : .black, location: 1)],
+                    startPoint: .leading, endPoint: .trailing
+                )
+            }
     }
 }
