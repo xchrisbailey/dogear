@@ -29,7 +29,7 @@ final class AudiobookPlayerModel {
     private(set) var sleepTimer: SleepTimer?
 
     let title: String
-    private let author: String?
+    let author: String?
     private let audiobook: any AudiobookSource
     private let positions: Positions?
     private let sharedPositions: SharedPositions?
