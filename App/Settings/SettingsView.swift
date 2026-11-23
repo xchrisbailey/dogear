@@ -1,0 +1,361 @@
+import DogearCore
+@preconcurrency import ReadiumNavigator
+import SwiftUI
+
+/// Everything the reader can set for the whole app: their account, the reader's defaults,
+/// the player's keys, Downloads and versions. Paper cards on the Library's felt, each named
+/// by a leather tag.
+struct SettingsView: View {
+    let session: Session
+
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    /// The same values the reader's own sheet edits, so the two never disagree.
+    @State private var reading = ReadingPreferences.load()
+    @State private var listening = ListeningPreferences.load()
+    @State private var isShowingDownloads = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    SettingsSection("Account") { account }
+                    SettingsSection("Reading") { readingRows }
+                    SettingsSection("Listening") { listeningRows }
+                    if model.downloadList.canDownload || !model.downloadList.downloads.isEmpty {
+                        SettingsSection("Downloads") { downloads }
+                    }
+                    SettingsSection("About") { about }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 32)
+                .frame(maxWidth: 600)
+                .frame(maxWidth: .infinity)
+            }
+            .background { FeltBackground() }
+            .navigationTitle("Settings")
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .tint(Theme.tabLettering)
+                }
+            }
+            .sheet(isPresented: $isShowingDownloads) { DownloadsView() }
+        }
+        .onChange(of: reading) { _, reading in ReadingPreferences.save(reading) }
+        .onChange(of: listening) { _, listening in
+            ListeningPreferences.save(listening)
+            model.nowPlaying?.player.apply(listening)
+        }
+    }
+
+    // MARK: Account
+
+    @ViewBuilder private var account: some View {
+        SettingsRow {
+            HStack(spacing: 12) {
+                Text(session.username.prefix(1).uppercased())
+                    .font(.headline)
+                    .foregroundStyle(Theme.clothInk)
+                    .frame(width: 40, height: 40)
+                    .background(Theme.bookCloth[0], in: .circle)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(session.username)
+                    Text(session.server.host() ?? session.server.absoluteString)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.inkSoft)
+                }
+            }
+            .accessibilityElement(children: .combine)
+        }
+        if model.outboxCount > 0 {
+            RowRule()
+            SettingsRow {
+                Text("Waiting to sync")
+                Spacer()
+                Text(model.outboxCount == 1 ? "1 Position" : "\(model.outboxCount) Positions")
+                    .foregroundStyle(Theme.inkSoft)
+            }
+        }
+        RowRule()
+        SignOutRow()
+    }
+
+    // MARK: Reading
+
+    @ViewBuilder private var readingRows: some View {
+        SettingsRow {
+            Text("Font")
+            Spacer()
+            Picker("Font", selection: $reading.fontFamily) {
+                ForEach(ReadingFonts.all, id: \.name) { font in
+                    Text(font.name).tag(font.family)
+                }
+            }
+            .labelsHidden()
+        }
+        RowRule()
+        SettingsRow {
+            Text("Text size")
+            Spacer()
+            Stepper(
+                (reading.fontSize ?? 1).formatted(.percent.precision(.fractionLength(0))),
+                value: Binding { reading.fontSize ?? 1 } set: { reading.fontSize = $0 },
+                in: 0.6 ... 2.5,
+                step: 0.1
+            )
+            .fixedSize()
+            .foregroundStyle(Theme.inkSoft)
+        }
+        RowRule()
+        SettingsRow {
+            Text("Theme")
+            Spacer()
+            PaperSegments(
+                selection: Binding { reading.theme ?? .light } set: { reading.theme = $0 },
+                choices: [("Light", ReadiumNavigator.Theme.light), ("Sepia", .sepia), ("Dark", .dark)]
+            )
+        }
+        RowRule()
+        SettingsRow {
+            Text("Layout")
+            Spacer()
+            PaperSegments(
+                selection: Binding { reading.scroll ?? false } set: { reading.scroll = $0 },
+                choices: [("Pages", false), ("Scroll", true)]
+            )
+        }
+        RowRule()
+        SettingsRow {
+            Text("Margins")
+            Spacer()
+            Slider(
+                value: Binding { reading.pageMargins ?? 1 } set: { reading.pageMargins = $0 },
+                in: 0.5 ... 2.5,
+                step: 0.25
+            )
+            .frame(maxWidth: 180)
+            .accessibilityLabel("Margins")
+        }
+        RowRule()
+        SettingsRow {
+            Text("Pages side by side")
+            Spacer()
+            Picker("Pages side by side", selection: Binding { PageSpread(reading) } set: { $0.apply(to: &reading) }) {
+                ForEach(PageSpread.allCases, id: \.self) { spread in
+                    Text(spread.name).tag(spread)
+                }
+            }
+            .labelsHidden()
+        }
+        .disabled(reading.scroll == true)
+    }
+
+    // MARK: Listening
+
+    @ViewBuilder private var listeningRows: some View {
+        SettingsRow {
+            Text("Skip back")
+            Spacer()
+            skipPicker("Skip back", selection: $listening.skipBack)
+        }
+        RowRule()
+        SettingsRow {
+            Text("Skip forward")
+            Spacer()
+            skipPicker("Skip forward", selection: $listening.skipForward)
+        }
+        RowRule()
+        SettingsRow {
+            Text("Speed")
+            Spacer()
+            Picker("Speed", selection: $listening.speed) {
+                ForEach(ListeningSettings.speeds, id: \.self) { speed in
+                    Text("\(speed.formatted(.number.precision(.fractionLength(0 ... 2))))×").tag(speed)
+                }
+            }
+            .labelsHidden()
+        }
+    }
+
+    private func skipPicker(_ title: String, selection: Binding<Duration>) -> some View {
+        Picker(title, selection: selection) {
+            ForEach(ListeningSettings.skipChoices, id: \.self) { skip in
+                Text("\(skip.components.seconds) seconds").tag(skip)
+            }
+        }
+        .labelsHidden()
+    }
+
+    // MARK: Downloads
+
+    @ViewBuilder private var downloads: some View {
+        SettingsRow {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(DownloadsView.size(model.downloadList.totalBytes)) on this device")
+                Text(model.downloadList.downloads.count == 1 ? "1 Book file" : "\(model.downloadList.downloads.count) Book files")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.inkSoft)
+            }
+        }
+        RowRule()
+        Button { isShowingDownloads = true } label: {
+            SettingsRow {
+                Text("Manage Downloads")
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Theme.inkSoft)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: About
+
+    @ViewBuilder private var about: some View {
+        SettingsRow {
+            Text("Dogear")
+            Spacer()
+            Text(Self.appVersion).foregroundStyle(Theme.inkSoft)
+        }
+        RowRule()
+        SettingsRow {
+            Text("Grimmory")
+            Spacer()
+            Text(session.serverVersion ?? "Unknown").foregroundStyle(Theme.inkSoft)
+        }
+    }
+
+    private static var appVersion: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String
+        return build.map { "\(version) (\($0))" } ?? version
+    }
+}
+
+/// Signing out, with a warning that says what it will discard.
+private struct SignOutRow: View {
+    @Environment(AppModel.self) private var model
+    @State private var isConfirming = false
+
+    /// Downloads go too: another account or Server numbers its Books differently.
+    private var warning: String {
+        let again = "Signing in again needs your Server address and password."
+        return switch (model.outboxCount > 0, !model.downloadList.downloads.isEmpty) {
+        case (true, true): "Some of your reading progress hasn't reached your Server yet. Signing out discards it and removes your Downloads from this device."
+        case (true, false): "Some of your reading progress hasn't reached your Server yet. Signing out discards it. \(again)"
+        case (false, true): "Signing out removes your Downloads from this device. \(again)"
+        case (false, false): "Signing out clears this device's copy of your library. \(again)"
+        }
+    }
+
+    var body: some View {
+        Button(role: .destructive) { isConfirming = true } label: {
+            SettingsRow {
+                Text("Sign Out…")
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Theme.ribbon)
+                Spacer()
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .confirmationDialog(warning, isPresented: $isConfirming, titleVisibility: .visible) {
+            Button("Sign Out", role: .destructive) {
+                Task { await model.signOut() }
+            }
+        }
+    }
+}
+
+/// A leather tag naming the section above its paper card.
+private struct SettingsSection<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ShelfLabel(title)
+                .padding(.leading, 4)
+            VStack(spacing: 0) { content }
+                .background {
+                    Theme.paper
+                        .overlay {
+                            RadialGradient(colors: [.white.opacity(0.4), .clear], center: .init(x: 0.25, y: 0.1), startRadius: 0, endRadius: 320)
+                        }
+                }
+                .clipShape(.rect(cornerRadius: 4))
+                .shadow(color: .black.opacity(0.5), radius: 5, y: 3)
+                // Paper is light whatever the device's appearance, so its text is always ink.
+                .environment(\.colorScheme, .light)
+                .foregroundStyle(Theme.ink)
+                .tint(Theme.tabLeather[0])
+        }
+        .padding(.top, 22)
+    }
+}
+
+/// One line on a settings card.
+private struct SettingsRow<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        HStack(spacing: 10) { content }
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+    }
+}
+
+/// A faint pencil rule between rows.
+private struct RowRule: View {
+    var body: some View {
+        Theme.inkSoft.opacity(0.18)
+            .frame(height: 1)
+            .accessibilityHidden(true)
+    }
+}
+
+/// A segmented choice whose chosen segment is a leather tab sunk into the paper.
+private struct PaperSegments<Value: Hashable>: View {
+    @Binding var selection: Value
+    let choices: [(name: String, value: Value)]
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(choices, id: \.value) { choice in
+                let isOn = choice.value == selection
+                Button { selection = choice.value } label: {
+                    Text(choice.name)
+                        .font(.subheadline)
+                        .foregroundStyle(isOn ? Theme.tabLetteringPressed : Theme.inkSoft)
+                        .padding(.horizontal, 11)
+                        .frame(minHeight: 30)
+                        .background {
+                            if isOn {
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(LinearGradient(colors: Theme.tabLeather, startPoint: .top, endPoint: .bottom))
+                                    .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
+                            }
+                        }
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isOn ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(Theme.ink.opacity(0.12), in: .rect(cornerRadius: 7))
+        .animation(.snappy(duration: 0.15), value: selection)
+    }
+}

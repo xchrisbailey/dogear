@@ -269,12 +269,12 @@ struct AudiobookPlayerView: View {
     private var transport: some View {
         HStack(spacing: 8) {
             Button {
-                model.skip(by: .zero - AudiobookPlayerModel.skipBack)
+                model.skip(by: .zero - model.skipBack)
             } label: {
-                KeyLabel(systemImage: "backward.fill", text: "\(Int(AudiobookPlayerModel.skipBack.seconds)) SEC")
+                KeyLabel(systemImage: "backward.fill", text: "\(Int(model.skipBack.seconds)) SEC")
             }
             .buttonStyle(KeyStyle())
-            .accessibilityLabel("Back \(Int(AudiobookPlayerModel.skipBack.seconds)) seconds")
+            .accessibilityLabel("Back \(Int(model.skipBack.seconds)) seconds")
             Button {
                 model.togglePlayback()
             } label: {
@@ -284,12 +284,12 @@ struct AudiobookPlayerView: View {
             .buttonStyle(KeyStyle(isMain: true, isDown: model.isPlaying))
             .accessibilityLabel(model.isPlaying ? "Pause" : "Play")
             Button {
-                model.skip(by: AudiobookPlayerModel.skipForward)
+                model.skip(by: model.skipForward)
             } label: {
-                KeyLabel(systemImage: "forward.fill", text: "\(Int(AudiobookPlayerModel.skipForward.seconds)) SEC")
+                KeyLabel(systemImage: "forward.fill", text: "\(Int(model.skipForward.seconds)) SEC")
             }
             .buttonStyle(KeyStyle())
-            .accessibilityLabel("Forward \(Int(AudiobookPlayerModel.skipForward.seconds)) seconds")
+            .accessibilityLabel("Forward \(Int(model.skipForward.seconds)) seconds")
         }
         .padding(.horizontal, 10)
         .padding(.top, 10)
@@ -307,7 +307,7 @@ struct AudiobookPlayerView: View {
                 DeckLabel(Self.format(speed: model.speed))
             }
             HStack(spacing: 0) {
-                ForEach(AudiobookPlayerModel.speeds, id: \.self) { speed in
+                ForEach(ListeningSettings.speeds, id: \.self) { speed in
                     Button {
                         model.setSpeed(speed)
                     } label: {

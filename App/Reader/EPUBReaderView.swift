@@ -158,21 +158,11 @@ private struct ContentsEntry: Identifiable {
 private struct ReadingSettingsView: View {
     @Binding var preferences: EPUBPreferences
 
-    private static let fonts: [(name: String, family: FontFamily?)] = [
-        ("Publisher's font", nil),
-        ("Iowan Old Style", .iowanOldStyle),
-        ("Georgia", .georgia),
-        ("Palatino", .palatino),
-        ("Athelas", .athelas),
-        ("Helvetica Neue", .helveticaNeue),
-        ("Seravek", .seravek),
-    ]
-
     var body: some View {
         NavigationStack {
             Form {
                 Picker("Font", selection: $preferences.fontFamily) {
-                    ForEach(Self.fonts, id: \.name) { font in
+                    ForEach(ReadingFonts.all, id: \.name) { font in
                         Text(font.name).tag(font.family)
                     }
                 }

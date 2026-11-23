@@ -66,4 +66,21 @@ struct ListeningControlsTests {
         #expect(afterFifteenMinutes)
         #expect(timer.remaining == .zero)
     }
+
+    @Test func savedListeningSettingsComeBack() {
+        let settings = ListeningSettings(storedSkipBack: 10, storedSkipForward: 60, storedSpeed: 1.5)
+
+        #expect(settings == ListeningSettings(skipBack: .seconds(10), skipForward: .seconds(60), speed: 1.5))
+    }
+
+    /// Nothing saved yet reads as zeros from UserDefaults; a value an older Dogear offered may be gone.
+    @Test(arguments: [(nil, nil, nil), (0, 0, 0), (17, 300, 0.6)] as [(Int?, Int?, Float?)])
+    func unknownListeningSettingsFallBackToTheStandardOnes(back: Int?, forward: Int?, speed: Float?) {
+        let settings = ListeningSettings(storedSkipBack: back, storedSkipForward: forward, storedSpeed: speed)
+
+        #expect(settings == .standard)
+        #expect(settings.skipBack == .seconds(15))
+        #expect(settings.skipForward == .seconds(30))
+        #expect(settings.speed == 1)
+    }
 }
