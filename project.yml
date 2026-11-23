@@ -54,7 +54,7 @@ targets:
         INFOPLIST_FILE: App/Info.plist
         CODE_SIGN_ENTITLEMENTS: App/Dogear.entitlements
         "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": "-"
-        # No NSAppTransportSecurity exceptions: HTTPS only (spec #1).
+        # HTTPS only, except plain HTTP to a Tailscale Server (ATS keys in App/Info.plist, ADR 0006).
   DogearTests:
     type: bundle.unit-test
     platform: iOS

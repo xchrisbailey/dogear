@@ -38,6 +38,40 @@ struct SignInTests {
     }
 
     @Test(arguments: [
+        "http://100.63.255.1",
+        "http://100.128.0.1",
+        "http://192.168.1.10:6060",
+        "http://grimmory.example.ts.net.evil.example",
+    ])
+    func plainHTTPOffTailscaleIsRefused(address: String) async {
+        let server = FakeGrimmory()
+
+        await #expect(throws: SignInError.insecureAddress) {
+            try await account(for: server).signIn(address: address, username: "reader", password: "correct horse")
+        }
+        #expect(server.requests.isEmpty)
+    }
+
+    /// WireGuard already encrypts a tailnet, and a Server there usually answers plain HTTP.
+    @Test(arguments: [
+        ("http://books.tail1234.ts.net:6060", "http://books.tail1234.ts.net:6060"),
+        ("http://100.101.102.103:6060", "http://100.101.102.103:6060"),
+        ("http://[fd7a:115c:a1e0::1]:6060", "http://[fd7a:115c:a1e0::1]:6060"),
+        ("http://grimmory:6060", "http://grimmory:6060"),
+        ("books.tail1234.ts.net:6060", "http://books.tail1234.ts.net:6060"),
+        ("100.101.102.103:6060/", "http://100.101.102.103:6060"),
+        ("https://books.tail1234.ts.net", "https://books.tail1234.ts.net"),
+        ("grimmory.example", "https://grimmory.example"),
+    ])
+    func tailscaleAddressMaySkipHTTPS(typed: String, expected: String) async throws {
+        let server = FakeGrimmory()
+
+        let session = try await account(for: server).signIn(address: typed, username: "reader", password: "correct horse")
+
+        #expect(session.server == URL(string: expected))
+    }
+
+    @Test(arguments: [
         (FakeGrimmory.Kind.unreachable, "correct horse", SignInError.unreachable),
         (.notGrimmory, "correct horse", .notGrimmory),
         (.grimmory, "wrong", .wrongCredentials),
