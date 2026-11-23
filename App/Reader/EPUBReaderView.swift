@@ -205,3 +205,16 @@ private struct ReadingSettingsView: View {
         }
     }
 }
+
+/// The typefaces offered for EPUBs, in the reader's sheet and in Settings.
+enum ReadingFonts {
+    static let all: [(name: String, family: FontFamily?)] = [
+        ("Publisher's font", nil),
+        ("Iowan Old Style", .iowanOldStyle),
+        ("Georgia", .georgia),
+        ("Palatino", .palatino),
+        ("Athelas", .athelas),
+        ("Helvetica Neue", .helveticaNeue),
+        ("Seravek", .seravek),
+    ]
+}
