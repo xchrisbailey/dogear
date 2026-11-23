@@ -19,4 +19,4 @@ App Transport Security allows the same set: `NSAllowsLocalNetworking` for bare n
 ## Consequences
 
 - A bare machine name is trusted as MagicDNS. On a LAN without Tailscale it could be an ordinary unencrypted host; that's the price of supporting short names.
-- 100.64.0.0/10 is also carrier-grade NAT space. A Server there that isn't on Tailscale would be reached unencrypted; that address can't be the target of a home Server from outside the carrier's network.
+- 100.64.0.0/10 is also carrier-grade NAT space, but a phone can't normally reach a Server at one of those addresses except over Tailscale, so in practice it is a tailnet address.
