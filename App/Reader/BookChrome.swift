@@ -66,13 +66,14 @@ struct OpenBook<Page: View>: View {
     let spineInMiddle: Bool
     @ViewBuilder var page: Page
 
-    /// The shadow where the paper dips into the spine.
+    /// The shadow where the paper dips into the spine. Between two pages it is only a faint
+    /// crease, so the eye isn't pulled to the middle of the spread while reading.
     private var gutter: [Gradient.Stop] {
         spineInMiddle
             ? [
-                .init(color: .clear, location: 0.42), .init(color: .black.opacity(0.08), location: 0.47),
-                .init(color: .black.opacity(0.3), location: 0.5),
-                .init(color: .black.opacity(0.08), location: 0.53), .init(color: .clear, location: 0.58),
+                .init(color: .clear, location: 0.475), .init(color: .black.opacity(0.025), location: 0.49),
+                .init(color: .black.opacity(0.07), location: 0.5),
+                .init(color: .black.opacity(0.025), location: 0.51), .init(color: .clear, location: 0.525),
             ]
             : [.init(color: .black.opacity(0.3), location: 0), .init(color: .black.opacity(0.08), location: 0.06), .init(color: .clear, location: 0.16)]
     }
