@@ -19,6 +19,15 @@ struct SettingsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    // Drawn here rather than as the navigation title, which a sheet letters in
+                    // the system's black and loses on the felt.
+                    Text("Settings")
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(Theme.clothInk)
+                        .shadow(color: .black.opacity(0.5), radius: 0, y: 1)
+                        .padding(.horizontal, 4)
+                        .padding(.top, 4)
+                        .accessibilityAddTraits(.isHeader)
                     SettingsSection("Account") { account }
                     SettingsSection("Reading") { readingRows }
                     SettingsSection("Listening") { listeningRows }
@@ -33,16 +42,18 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity)
             }
             .background { FeltBackground() }
-            .navigationTitle("Settings")
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
-                        .tint(Theme.tabLettering)
+                        .fontWeight(.semibold)
+                        .tint(Theme.clothInk)
                 }
             }
             .sheet(isPresented: $isShowingDownloads) { DownloadsView() }
         }
+        // Dark chrome to match the felt; the paper cards set their own light appearance.
+        .preferredColorScheme(.dark)
         .onChange(of: reading) { _, reading in ReadingPreferences.save(reading) }
         .onChange(of: listening) { _, listening in
             ListeningPreferences.save(listening)
