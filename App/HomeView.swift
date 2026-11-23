@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var navigation = Navigation()
     @State private var preferredColumn = NavigationSplitViewColumn.detail
     @State private var isShowingDownloads = false
+    @State private var isShowingSettings = false
     @Environment(AppModel.self) private var model
 
     var body: some View {
@@ -49,9 +50,10 @@ struct HomeView: View {
                     if model.downloadList.canDownload || !model.downloadList.downloads.isEmpty {
                         Button("Downloads", systemImage: "arrow.down.circle") { isShowingDownloads = true }
                     }
-                    AccountMenu(session: session)
+                    Button("Settings", systemImage: "gearshape") { isShowingSettings = true }
                 }
                 .sheet(isPresented: $isShowingDownloads) { DownloadsView() }
+                .sheet(isPresented: $isShowingSettings) { SettingsView(session: session) }
             }
         }
         // Under both columns, so the audiobook stays in reach wherever the library is.

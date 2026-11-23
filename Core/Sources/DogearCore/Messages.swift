@@ -6,7 +6,7 @@ extension SignInError: LocalizedError {
         case .invalidAddress:
             "That doesn't look like a Server address. Try something like https://grimmory.example."
         case .insecureAddress:
-            "Dogear only connects over HTTPS so your password is never sent unencrypted. Use an https:// address for your Server."
+            "Dogear only uses plain http:// over Tailscale, which encrypts it already, so your password is never sent unencrypted. Use an https:// address, or your Server's Tailscale address."
         case .unreachable:
             "Couldn't reach a Server at that address. Check the address and that you're on the right network."
         case .notGrimmory:

@@ -21,7 +21,8 @@ AVFoundation, the lock screen and AirPlay aren't covered by automated tests (spe
 ## Skip
 
 - [ ] Back 15 s and forward 30 s in the app, including across a Chapter and (folder) a Track boundary.
-- [ ] The lock screen and Control Center show skip buttons (not next/previous) and they skip 15 s / 30 s.
+- [ ] The lock screen and Control Center show skip buttons (not next/previous) and they skip 15 s / 30 s (or the times chosen in Settings).
+- [ ] Change the skip times in Settings while an audiobook is loaded: the keys' labels, the jumps and the lock-screen buttons follow straight away.
 - [ ] The lock-screen scrubber seeks.
 - [ ] Headphone/AirPods play-pause works.
 

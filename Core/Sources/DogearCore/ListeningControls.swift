@@ -51,3 +51,34 @@ extension AudiobookInfo {
         return starts.first { $0 > time } ?? duration
     }
 }
+
+/// The listener's choices for every audiobook: how far the skip keys jump and the playback speed.
+public struct ListeningSettings: Sendable, Equatable {
+    public static let skipChoices: [Duration] = [10, 15, 30, 45, 60].map { .seconds($0) }
+    public static let speeds: [Float] = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+    public static let standard = ListeningSettings(skipBack: .seconds(15), skipForward: .seconds(30), speed: 1)
+
+    public var skipBack: Duration
+    public var skipForward: Duration
+    public var speed: Float
+
+    public init(skipBack: Duration, skipForward: Duration, speed: Float) {
+        self.skipBack = skipBack
+        self.skipForward = skipForward
+        self.speed = speed
+    }
+
+    /// From what the device saved, in whole seconds and a rate. A value that isn't one of the
+    /// choices (never saved, or from an older Dogear) falls back to the standard one.
+    public init(storedSkipBack: Int?, storedSkipForward: Int?, storedSpeed: Float?) {
+        func skip(_ seconds: Int?, or standard: Duration) -> Duration {
+            guard let seconds else { return standard }
+            return Self.skipChoices.first { $0 == .seconds(seconds) } ?? standard
+        }
+        self.init(
+            skipBack: skip(storedSkipBack, or: Self.standard.skipBack),
+            skipForward: skip(storedSkipForward, or: Self.standard.skipForward),
+            speed: storedSpeed.flatMap { speed in Self.speeds.first { $0 == speed } } ?? Self.standard.speed
+        )
+    }
+}

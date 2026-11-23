@@ -33,6 +33,8 @@ struct SignInView: View {
                         .autocorrectionDisabled()
                 } header: {
                     Text("Server address")
+                } footer: {
+                    Text("On Tailscale, plain http:// works too, since Tailscale already encrypts the connection.")
                 }
 
                 Section {

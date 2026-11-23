@@ -252,7 +252,7 @@ final class AppModel {
         session = try await account.signIn(address: address, username: username, password: password)
     }
 
-    /// Clears the Outbox along with everything else; `AccountMenu` warns first if it isn't empty.
+    /// Clears the Outbox along with everything else; the Sign Out row in Settings warns first if it isn't empty.
     func signOut() async {
         await eject()
         await account.signOut()

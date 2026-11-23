@@ -27,6 +27,9 @@ final class AudiobookPlayerModel {
     /// Kept on the player, not the item, so it survives the rebuild when the token changes.
     private(set) var speed: Float
     private(set) var sleepTimer: SleepTimer?
+    /// How far the skip keys jump, from Settings.
+    private(set) var skipBack: Duration
+    private(set) var skipForward: Duration
 
     let title: String
     let author: String?
@@ -57,10 +60,6 @@ final class AudiobookPlayerModel {
     private var repositioning = 0
 
     private static let saveInterval = CMTime(seconds: 5, preferredTimescale: 1)
-    static let speeds: [Float] = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3]
-    static let skipBack: Duration = .seconds(15)
-    static let skipForward: Duration = .seconds(30)
-    private static let speedKey = "playbackSpeed"
     private static let log = Logger(subsystem: "computer.srcery.dogear", category: "Player")
 
     init(
@@ -74,8 +73,10 @@ final class AudiobookPlayerModel {
         self.sharedPositions = sharedPositions
         recorder = PositionRecorder(bookID: audiobook.bookID, positions: positions, sharedPositions: sharedPositions)
         self.cover = cover
-        let saved = UserDefaults.standard.float(forKey: Self.speedKey)
-        speed = Self.speeds.contains(saved) ? saved : 1
+        let settings = ListeningPreferences.load()
+        speed = settings.speed
+        skipBack = settings.skipBack
+        skipForward = settings.skipForward
         player.defaultRate = speed
     }
 
@@ -205,9 +206,19 @@ final class AudiobookPlayerModel {
         seek(to: info.skip(from: currentTime, by: interval))
     }
 
+    /// Settings changed while this audiobook is loaded.
+    func apply(_ settings: ListeningSettings) {
+        skipBack = settings.skipBack
+        skipForward = settings.skipForward
+        let center = MPRemoteCommandCenter.shared()
+        center.skipBackwardCommand.preferredIntervals = [NSNumber(value: skipBack.seconds)]
+        center.skipForwardCommand.preferredIntervals = [NSNumber(value: skipForward.seconds)]
+        if settings.speed != speed { setSpeed(settings.speed) }
+    }
+
     func setSpeed(_ speed: Float) {
         self.speed = speed
-        UserDefaults.standard.set(speed, forKey: Self.speedKey)
+        ListeningPreferences.save(speed: speed)
         // `defaultRate` is what `play()` uses, including after an item rebuild.
         player.defaultRate = speed
         if isPlaying { player.rate = speed }
@@ -462,19 +473,21 @@ final class AudiobookPlayerModel {
             self.seek(to: .seconds(event.positionTime))
             return .success
         }
-        center.skipBackwardCommand.preferredIntervals = [NSNumber(value: Self.skipBack.seconds)]
+        center.skipBackwardCommand.preferredIntervals = [NSNumber(value: skipBack.seconds)]
         center.skipBackwardCommand.addTarget { [weak self] event in
-            let interval = (event as? MPSkipIntervalCommandEvent)?.interval ?? Self.skipBack.seconds
-            self?.skip(by: .seconds(-interval))
+            guard let self else { return .commandFailed }
+            let interval = (event as? MPSkipIntervalCommandEvent)?.interval ?? self.skipBack.seconds
+            self.skip(by: .seconds(-interval))
             return .success
         }
-        center.skipForwardCommand.preferredIntervals = [NSNumber(value: Self.skipForward.seconds)]
+        center.skipForwardCommand.preferredIntervals = [NSNumber(value: skipForward.seconds)]
         center.skipForwardCommand.addTarget { [weak self] event in
-            let interval = (event as? MPSkipIntervalCommandEvent)?.interval ?? Self.skipForward.seconds
-            self?.skip(by: .seconds(interval))
+            guard let self else { return .commandFailed }
+            let interval = (event as? MPSkipIntervalCommandEvent)?.interval ?? self.skipForward.seconds
+            self.skip(by: .seconds(interval))
             return .success
         }
-        center.changePlaybackRateCommand.supportedPlaybackRates = Self.speeds.map { NSNumber(value: $0) }
+        center.changePlaybackRateCommand.supportedPlaybackRates = ListeningSettings.speeds.map { NSNumber(value: $0) }
         center.changePlaybackRateCommand.addTarget { [weak self] event in
             guard let self, let event = event as? MPChangePlaybackRateCommandEvent else { return .commandFailed }
             self.setSpeed(event.playbackRate)
@@ -539,5 +552,32 @@ extension Duration {
 private extension CMTime {
     init(_ duration: Duration) {
         self = CMTime(seconds: duration.seconds, preferredTimescale: 1000)
+    }
+}
+
+/// The listener's skip times and speed, shared by every audiobook on the device.
+enum ListeningPreferences {
+    private static let speedKey = "playbackSpeed"
+    private static let skipBackKey = "player.skipBackSeconds"
+    private static let skipForwardKey = "player.skipForwardSeconds"
+
+    static func load() -> ListeningSettings {
+        let defaults = UserDefaults.standard
+        return ListeningSettings(
+            storedSkipBack: defaults.object(forKey: skipBackKey) as? Int,
+            storedSkipForward: defaults.object(forKey: skipForwardKey) as? Int,
+            storedSpeed: defaults.object(forKey: speedKey) as? Float
+        )
+    }
+
+    static func save(_ settings: ListeningSettings) {
+        let defaults = UserDefaults.standard
+        defaults.set(Int(settings.skipBack.seconds), forKey: skipBackKey)
+        defaults.set(Int(settings.skipForward.seconds), forKey: skipForwardKey)
+        save(speed: settings.speed)
+    }
+
+    static func save(speed: Float) {
+        UserDefaults.standard.set(speed, forKey: speedKey)
     }
 }
