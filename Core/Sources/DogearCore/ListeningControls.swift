@@ -82,3 +82,20 @@ public struct ListeningSettings: Sendable, Equatable {
         )
     }
 }
+
+/// How the audiobook player looks. Every Player skin drives the same player with the same
+/// controls; only the drawing differs.
+public enum PlayerSkin: String, Sendable, CaseIterable {
+    /// The portable tape player with cream plastic and piano keys.
+    case pocket
+    /// The stereo cassette deck with a glowing display and level meters.
+    case hifi
+
+    public static let standard = PlayerSkin.pocket
+
+    /// From what the device saved. Nothing saved, or a skin an older or newer Dogear knew, is
+    /// the standard one.
+    public init(stored: String?) {
+        self = stored.flatMap(Self.init(rawValue:)) ?? .standard
+    }
+}

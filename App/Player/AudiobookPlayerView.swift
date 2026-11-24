@@ -2,8 +2,9 @@ import AVKit
 import DogearCore
 import SwiftUI
 
-/// Full-screen player for one audiobook Book file, as a pocket tape player with the Book loaded
-/// as a cassette. The tape on the reels is how far through the Book the listener is.
+/// Full-screen player for one audiobook Book file, drawn in the listener's Player skin: the
+/// pocket tape player or the hi-fi deck. Either way the Book is loaded as a cassette and the
+/// tape on its reels is how far through the Book the listener is.
 ///
 /// Closing it leaves the audiobook playing under the library; Eject stops it.
 struct AudiobookPlayerView: View {
@@ -14,22 +15,18 @@ struct AudiobookPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppModel.self) private var app
+    @AppStorage(ListeningPreferences.skinKey) private var storedSkin: String?
     @State private var isShowingChapters = false
     @State private var isShowingTracks = false
-    @State private var scrubbing: Double?
     @State private var coverColors = CoverColors()
-    /// How much the cassette shrinks to fit a narrow door.
-    @State private var cassetteScale: CGFloat = 1
-    /// The counter's wheels grow with the digits on them.
-    @ScaledMetric(relativeTo: .title2) private var wheelWidth: CGFloat = 20
-    @ScaledMetric(relativeTo: .title2) private var wheelHeight: CGFloat = 30
-    @ScaledMetric(relativeTo: .title2) private var colonWidth: CGFloat = 8
+
+    private var skin: PlayerSkin { PlayerSkin(stored: storedSkin) }
 
     var body: some View {
         NavigationStack {
             GeometryReader { proxy in
                 ScrollView {
-                    content
+                    player
                         .padding(14)
                         // On a tall screen the player sits in the middle, not against the top.
                         .frame(minHeight: proxy.size.height, alignment: sizeClass == .regular ? .center : .top)
@@ -37,13 +34,10 @@ struct AudiobookPlayerView: View {
                 // Pulled down past the top, the player closes like a sheet, and the tape plays on.
                 .modifier(PullsDownToClose(close: close))
             }
-            .background {
-                LinearGradient(colors: [Deck.bodyLight, Deck.bodyDark], startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            }
-            // The player's body is cream plastic whatever the device's appearance.
-            .environment(\.colorScheme, .light)
-            .tint(Deck.orange)
+            .background { skinBackground.ignoresSafeArea() }
+            // Each skin is its own plastic or metal whatever the device's appearance.
+            .environment(\.colorScheme, skin == .hifi ? .dark : .light)
+            .tint(skin == .hifi ? Hifi.glow : Deck.orange)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $isShowingChapters) {
                 ChaptersView(model: model)
@@ -59,91 +53,28 @@ struct AudiobookPlayerView: View {
         .dynamicTypeSize(...DynamicTypeSize.accessibility3)
     }
 
-    @ViewBuilder private var content: some View {
-        switch model.state {
-        case .opening:
-            VStack(spacing: 14) {
-                topBar
-                door { ProgressView("Opening…").tint(.white).foregroundStyle(.white) }
-            }
-        case let .failed(message):
-            VStack(spacing: 14) {
-                topBar
-                door { EmptyView() }
-                ContentUnavailableView("Can't play this audiobook", systemImage: "exclamationmark.triangle", description: Text(message))
-            }
-        case .ready:
-            if sizeClass == .regular {
-                // Cassette beside the controls, using the iPad's width.
-                VStack(spacing: 14) {
-                    topBar
-                    HStack(alignment: .top, spacing: 32) {
-                        VStack(spacing: 14) {
-                            door { cassette }
-                            chapterStrip
-                            problemNote
-                            counter
-                        }
-                        .frame(maxWidth: 440)
-                        VStack(spacing: 14) {
-                            scrubber
-                            transport
-                            speedSlider
-                            outputs
-                        }
-                        .frame(maxWidth: 440)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            } else {
-                VStack(spacing: 14) {
-                    topBar
-                    door { cassette }
-                    chapterStrip
-                    problemNote
-                    counter
-                    scrubber
-                    transport
-                    speedSlider
-                    outputs
-                }
-            }
+    @ViewBuilder private var player: some View {
+        switch skin {
+        case .pocket: PocketPlayer(model: model, controls: controls)
+        case .hifi: HifiDeck(model: model, controls: controls)
         }
     }
 
-    private var elapsed: Double { scrubbing ?? model.currentTime.seconds }
-    private var duration: Double { max(model.info?.duration.seconds ?? 1, 1) }
-
-    /// Close leaves the tape running under the library; Eject stops it. Chapters opens the
-    /// cassette's insert.
-    private var topBar: some View {
-        HStack(spacing: 8) {
-            Button("Close", systemImage: "chevron.down", action: close)
-                .labelStyle(.iconOnly)
-                .buttonStyle(CapStyle())
-                .accessibilityHint("Keeps playing")
-            Button("Eject", systemImage: "eject.fill") { Task { await app.eject() } }
-                .buttonStyle(CapStyle())
-                .accessibilityHint("Stops playing and closes the player")
-            Spacer()
-            Text("DOGEAR")
-                .font(.system(size: 16, weight: .bold).width(.condensed))
-                .tracking(5)
-                .foregroundStyle(Deck.print)
-                .lineLimit(1)
-                .fixedSize()
-                .accessibilityHidden(true)
-            Spacer()
-            if model.info?.isFolder == true {
-                Button("Tracks", systemImage: "list.number") { isShowingTracks = true }
-                    .buttonStyle(CapStyle())
-                    .disabled(model.info?.tracks.isEmpty ?? true)
-            } else {
-                Button("Chapters", systemImage: "list.bullet") { isShowingChapters = true }
-                    .buttonStyle(CapStyle())
-                    .disabled(model.info?.chapters.isEmpty ?? true)
-            }
+    @ViewBuilder private var skinBackground: some View {
+        switch skin {
+        case .pocket: PocketPlayer.background
+        case .hifi: HifiDeck.background
         }
+    }
+
+    private var controls: PlayerControls {
+        PlayerControls(
+            stripe: Color(coverColors.color(of: cover) ?? SpineColor.palette[1]),
+            close: close,
+            showContents: {
+                if model.info?.isFolder == true { isShowingTracks = true } else { isShowingChapters = true }
+            }
+        )
     }
 
     /// Leaves the tape running under the library, or ejects one that can't play, so no strip is
@@ -154,240 +85,6 @@ struct AudiobookPlayerView: View {
         } else {
             dismiss()
         }
-    }
-
-    /// The tinted window the cassette sits behind.
-    private func door(@ViewBuilder _ loaded: () -> some View) -> some View {
-        LinearGradient(colors: [Color(hex: 0x2A2C30), Color(hex: 0x0E0F11)], startPoint: .topLeading, endPoint: .bottomTrailing)
-            .frame(height: 220)
-            .overlay { loaded() }
-            .clipShape(.rect(cornerRadius: 14))
-            .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(Deck.trim, lineWidth: 3) }
-            .onGeometryChange(for: CGFloat.self, of: \.size.width) { width in
-                cassetteScale = min(1, (width - 28) / LoadedCassette.size.width)
-            }
-    }
-
-    private var cassette: some View {
-        LoadedCassette(
-            title: model.title, author: model.author,
-            stripe: Color(coverColors.color(of: cover) ?? SpineColor.palette[1]),
-            throughBook: elapsed / duration, isPlaying: model.isPlaying, speed: Double(model.speed)
-        )
-        .scaleEffect(cassetteScale)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel([model.title, model.author].compactMap { $0 }.joined(separator: ", "))
-    }
-
-    /// The Chapter or Track playing, on embossed label tape.
-    private var chapterStrip: some View {
-        Text((model.chapter?.title ?? model.track.map(TracksView.title) ?? " ").uppercased())
-            .font(.system(.subheadline, weight: .bold).width(.condensed))
-            .tracking(2)
-            .lineLimit(1)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .background(LinearGradient(colors: [Color(hex: 0x2A2A2C), Color(hex: 0x111111)], startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 3))
-            .rotationEffect(.degrees(-0.6))
-    }
-
-    @ViewBuilder private var problemNote: some View {
-        if let problem = model.problem {
-            Label(problem, systemImage: "exclamationmark.triangle")
-                .font(Theme.label(.subheadline))
-                .foregroundStyle(Theme.ink)
-                .padding(10)
-                .frame(maxWidth: .infinity)
-                .background(Color(hex: 0xFFE98A), in: .rect(cornerRadius: 2))
-                .rotationEffect(.degrees(0.8))
-        }
-    }
-
-    /// Whole-book time on a mechanical counter, with what's left of the tape beside it, or
-    /// under it when large text leaves no room beside.
-    private var counter: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .bottom) {
-                elapsedCounter
-                Spacer()
-                remainingCounter
-            }
-            VStack(alignment: .leading, spacing: 10) {
-                elapsedCounter
-                remainingCounter
-            }
-        }
-    }
-
-    private var elapsedCounter: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            DeckLabel("Tape counter")
-            HStack(spacing: 2) {
-                ForEach(Array(Self.wheels(elapsed).enumerated()), id: \.offset) { _, character in
-                    Text(String(character))
-                        .font(.system(.title2, design: .monospaced, weight: .medium))
-                        .foregroundStyle(Color(hex: 0xF4F1E8))
-                        .frame(width: character == ":" ? colonWidth : wheelWidth, height: wheelHeight)
-                        .background(character == ":" ? Color.clear : Color(hex: 0x161616), in: .rect(cornerRadius: 2))
-                }
-            }
-            .padding(4)
-            .background(.black, in: .rect(cornerRadius: 4))
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Elapsed \(Self.format(elapsed))")
-    }
-
-    private var remainingCounter: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            DeckLabel("Tape left")
-            Text("-" + Self.wheels(max(0, duration - elapsed)))
-                .font(.system(.title2, design: .monospaced, weight: .medium))
-                .foregroundStyle(Deck.print)
-                .frame(minHeight: wheelHeight + 8)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Remaining \(Self.format(max(0, duration - elapsed)))")
-    }
-
-    /// Whole-book time; Chapters are in the list.
-    private var scrubber: some View {
-        Slider(
-            value: Binding { elapsed } set: { scrubbing = $0 },
-            in: 0 ... duration
-        ) { editing in
-            if !editing, let scrubbing {
-                model.seek(to: .seconds(scrubbing))
-                self.scrubbing = nil
-            }
-        }
-        .accessibilityLabel("Position")
-        .accessibilityValue(Self.format(elapsed))
-    }
-
-    private var transport: some View {
-        HStack(spacing: 8) {
-            Button {
-                model.skip(by: .zero - model.skipBack)
-            } label: {
-                KeyLabel(systemImage: "backward.fill", text: "\(Int(model.skipBack.seconds)) SEC")
-            }
-            .buttonStyle(KeyStyle())
-            .accessibilityLabel("Back \(Int(model.skipBack.seconds)) seconds")
-            Button {
-                model.togglePlayback()
-            } label: {
-                KeyLabel(systemImage: model.isPlaying ? "pause.fill" : "play.fill", text: model.isPlaying ? "PAUSE" : "PLAY")
-            }
-            // A tape player's play key stays down while the tape runs.
-            .buttonStyle(KeyStyle(isMain: true, isDown: model.isPlaying))
-            .accessibilityLabel(model.isPlaying ? "Pause" : "Play")
-            Button {
-                model.skip(by: model.skipForward)
-            } label: {
-                KeyLabel(systemImage: "forward.fill", text: "\(Int(model.skipForward.seconds)) SEC")
-            }
-            .buttonStyle(KeyStyle())
-            .accessibilityLabel("Forward \(Int(model.skipForward.seconds)) seconds")
-        }
-        .padding(.horizontal, 10)
-        .padding(.top, 10)
-        .padding(.bottom, 16)
-        .background(LinearGradient(colors: [Color(hex: 0xA9A190), Color(hex: 0x8C8473)], startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 10))
-        .sensoryFeedback(.impact, trigger: model.isPlaying)
-    }
-
-    /// One detent for each speed; the knob sits on the one in use.
-    private var speedSlider: some View {
-        VStack(spacing: 2) {
-            HStack {
-                DeckLabel("Speed")
-                Spacer()
-                DeckLabel(Self.format(speed: model.speed))
-            }
-            HStack(spacing: 0) {
-                ForEach(ListeningSettings.speeds, id: \.self) { speed in
-                    Button {
-                        model.setSpeed(speed)
-                    } label: {
-                        VStack(spacing: 2) {
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(LinearGradient(colors: [Deck.orangeDark, Deck.orange, Deck.orangeDark], startPoint: .leading, endPoint: .trailing))
-                                .frame(width: 18, height: 26)
-                                .shadow(color: .black.opacity(0.45), radius: 2, y: 2)
-                                .opacity(speed == model.speed ? 1 : 0)
-                            Text(speed.formatted(.number.precision(.fractionLength(0 ... 2))))
-                                .font(.system(.caption2, weight: .bold).width(.condensed))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.6)
-                                .foregroundStyle(Deck.print)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Speed \(Self.format(speed: speed))")
-                    .accessibilityAddTraits(speed == model.speed ? .isSelected : [])
-                }
-            }
-            .background(alignment: .top) {
-                // The slot the knob slides in.
-                Capsule().fill(Color(hex: 0x17120E)).frame(height: 6).padding(.horizontal, 16).padding(.top, 12)
-            }
-            .sensoryFeedback(.selection, trigger: model.speed)
-        }
-    }
-
-    private var outputs: some View {
-        HStack {
-            HStack(spacing: 8) {
-                RoutePicker()
-                    .frame(width: 44, height: 44)
-                    .background(Color(hex: 0x3A3A3D), in: .circle)
-                DeckLabel("Output")
-            }
-            Spacer()
-            sleepMenu
-        }
-    }
-
-    private var sleepMenu: some View {
-        Menu {
-            if model.sleepTimer != nil {
-                Button("Turn Off", systemImage: "moon.zzz") { model.setSleepTimer(nil) }
-            }
-            Button("End of Chapter") { model.setSleepTimer(.endOfChapter) }
-            ForEach([5, 15, 30, 45, 60], id: \.self) { minutes in
-                Button("\(minutes) minutes") { model.setSleepTimer(.after(.seconds(minutes * 60))) }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                VStack(alignment: .trailing, spacing: 2) {
-                    DeckLabel("Sleep timer")
-                    Text(sleepLabel)
-                        .font(.system(.subheadline, weight: .bold).width(.condensed))
-                        .monospacedDigit()
-                        .foregroundStyle(Deck.print)
-                }
-                // A dial whose pointer leaves "off" once a timer is set.
-                Circle()
-                    .fill(Color(hex: 0x2A2A2C))
-                    .frame(width: 44, height: 44)
-                    .overlay(alignment: .top) {
-                        Capsule().fill(Deck.orange).frame(width: 4, height: 13).padding(.top, 4)
-                    }
-                    .rotationEffect(.degrees(model.sleepTimer == nil ? -120 : 30))
-                    .shadow(color: .black.opacity(0.45), radius: 3, y: 3)
-            }
-        }
-        .accessibilityLabel(model.sleepTimer == nil ? "Sleep timer" : "Sleep timer, \(sleepLabel)")
-    }
-
-    private var sleepLabel: String {
-        guard let timer = model.sleepTimer else { return "Off" }
-        if let remaining = timer.remaining { return Self.format(remaining.seconds.rounded(.up)) }
-        return "Chapter end"
     }
 
     static func format(speed: Float) -> String {
@@ -405,16 +102,67 @@ struct AudiobookPlayerView: View {
     }
 }
 
-/// The player folded down to a strip under the library while its audiobook is loaded. A tap opens
-/// the player again; the key plays and pauses without opening it.
+/// What a Player skin needs from the player around it, beyond the model.
+struct PlayerControls {
+    /// The cassette label's stripe, from the Book's cover.
+    let stripe: Color
+    /// Closes the player and leaves the tape running.
+    let close: () -> Void
+    /// Opens the Chapters, or the Tracks of a folder audiobook.
+    let showContents: () -> Void
+}
+
+/// What every Player skin shows the same way.
+extension AudiobookPlayerModel {
+    /// Whole-book length in seconds, never zero so it can divide.
+    var bookSeconds: Double { max(info?.duration.seconds ?? 1, 1) }
+
+    /// The Chapter or Track playing.
+    var placeName: String? { chapter?.title ?? track.map(TracksView.title) }
+
+    /// Folder audiobooks list Tracks; the rest list Chapters.
+    var contentsName: String { info?.isFolder == true ? "Tracks" : "Chapters" }
+    var contentsIcon: String { info?.isFolder == true ? "list.number" : "list.bullet" }
+    var hasContents: Bool {
+        info?.isFolder == true ? !(info?.tracks.isEmpty ?? true) : !(info?.chapters.isEmpty ?? true)
+    }
+
+    var sleepLabel: String {
+        guard let timer = sleepTimer else { return "Off" }
+        if let remaining = timer.remaining { return AudiobookPlayerView.format(remaining.seconds.rounded(.up)) }
+        return "Chapter end"
+    }
+}
+
+/// The sleep timer's choices, for a skin's menu.
+struct SleepTimerChoices: View {
+    let model: AudiobookPlayerModel
+
+    var body: some View {
+        if model.sleepTimer != nil {
+            Button("Turn Off", systemImage: "moon.zzz") { model.setSleepTimer(nil) }
+        }
+        Button("End of Chapter") { model.setSleepTimer(.endOfChapter) }
+        ForEach([5, 15, 30, 45, 60], id: \.self) { minutes in
+            Button("\(minutes) minutes") { model.setSleepTimer(.after(.seconds(minutes * 60))) }
+        }
+    }
+}
+
+/// The player folded down to a strip under the library while its audiobook is loaded, in the
+/// Player skin's materials. A tap opens the player again; the key plays and pauses without
+/// opening it.
 struct NowPlayingBar: View {
     let player: AudiobookPlayerModel
     let open: () -> Void
 
     @Environment(AppModel.self) private var app
+    @AppStorage(ListeningPreferences.skinKey) private var storedSkin: String?
+
+    private var isHifi: Bool { PlayerSkin(stored: storedSkin) == .hifi }
 
     private var detail: String? {
-        player.chapter?.title ?? player.track.map(TracksView.title) ?? player.author
+        player.placeName ?? player.author
     }
 
     var body: some View {
@@ -423,16 +171,23 @@ struct NowPlayingBar: View {
                 HStack(spacing: 10) {
                     Image(systemName: "recordingtape")
                         .font(.title2)
-                        .foregroundStyle(Deck.print)
+                        .foregroundStyle(isHifi ? Hifi.print : Deck.print)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(player.title)
-                            .font(Theme.label(.subheadline))
-                            .foregroundStyle(Theme.pen)
+                        if isHifi {
+                            Text(player.title.uppercased())
+                                .font(.system(.subheadline, design: .monospaced, weight: .semibold))
+                                .foregroundStyle(Hifi.glow)
+                                .shadow(color: Hifi.glow.opacity(0.6), radius: 4)
+                        } else {
+                            Text(player.title)
+                                .font(Theme.label(.subheadline))
+                                .foregroundStyle(Theme.pen)
+                        }
                         if let detail {
                             Text(detail)
                                 .font(.system(.caption, weight: .bold).width(.condensed))
-                                .foregroundStyle(Deck.print.opacity(0.85))
+                                .foregroundStyle(isHifi ? Hifi.print : Deck.print.opacity(0.85))
                         }
                     }
                     .lineLimit(1)
@@ -449,16 +204,22 @@ struct NowPlayingBar: View {
             }
             .labelStyle(.iconOnly)
             .font(.title3)
-            .foregroundStyle(.white)
+            .foregroundStyle(isHifi ? Hifi.lettering : .white)
             .frame(width: 44, height: 44)
-            .background(LinearGradient(colors: [Color(hex: 0xF0692B), Color(hex: 0xC9460F)], startPoint: .top, endPoint: .bottom), in: .circle)
+            .background(
+                LinearGradient(colors: isHifi ? Hifi.key : [Color(hex: 0xF0692B), Color(hex: 0xC9460F)], startPoint: .top, endPoint: .bottom),
+                in: .circle
+            )
             .disabled(!isReady)
         }
         .padding(.leading, 14)
         .padding(.trailing, 8)
         .padding(.vertical, 6)
-        .background(LinearGradient(colors: [Deck.bodyLight, Deck.bodyDark], startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 12))
-        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(Deck.trim, lineWidth: 1) }
+        .background(
+            LinearGradient(colors: isHifi ? Hifi.panel : [Deck.bodyLight, Deck.bodyDark], startPoint: .top, endPoint: .bottom),
+            in: .rect(cornerRadius: 12)
+        )
+        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(isHifi ? Hifi.bezel : Deck.trim, lineWidth: 1) }
         .shadow(color: .black.opacity(0.5), radius: 8, y: 4)
         .contextMenu {
             Button("Eject", systemImage: "eject.fill") { Task { await app.eject() } }
@@ -466,8 +227,8 @@ struct NowPlayingBar: View {
         .accessibilityAction(named: "Eject") { Task { await app.eject() } }
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
-        // Cream plastic whatever the device's appearance, like the player.
-        .environment(\.colorScheme, .light)
+        // The skin's plastic or metal whatever the device's appearance, like the player.
+        .environment(\.colorScheme, isHifi ? .dark : .light)
     }
 
     private var isReady: Bool {
@@ -476,12 +237,15 @@ struct NowPlayingBar: View {
 }
 
 /// The system's AirPlay and Bluetooth route picker.
-private struct RoutePicker: UIViewRepresentable {
+struct RoutePicker: UIViewRepresentable {
+    /// The icon's colour while playing somewhere other than the device.
+    var activeTint: UIColor = .systemOrange
+
     func makeUIView(context: Context) -> AVRoutePickerView {
         let picker = AVRoutePickerView()
         picker.prioritizesVideoDevices = false
         picker.tintColor = .white
-        picker.activeTintColor = .systemOrange
+        picker.activeTintColor = activeTint
         return picker
     }
 
@@ -533,7 +297,7 @@ private struct ChaptersView: View {
     }
 }
 
-private struct TracksView: View {
+struct TracksView: View {
     let model: AudiobookPlayerModel
     @Environment(\.dismiss) private var dismiss
 
@@ -582,90 +346,9 @@ private struct TracksView: View {
     }
 }
 
-/// The pocket player's plastic, print and keys.
-private enum Deck {
-    static let bodyLight = Color(hex: 0xEFE9D8)
-    static let bodyDark = Color(hex: 0xD9D1BC)
-    static let trim = Color(hex: 0xBDB5A0)
-    /// Text printed on the body.
-    static let print = Color(hex: 0x2B2620)
-    static let orange = Color(hex: 0xE2571C)
-    static let orangeDark = Color(hex: 0xB03D0C)
-}
-
-/// Small print naming a control.
-private struct DeckLabel: View {
-    let text: String
-
-    init(_ text: String) {
-        self.text = text
-    }
-
-    var body: some View {
-        Text(text.uppercased())
-            .font(.system(.caption2, weight: .bold).width(.condensed))
-            .tracking(1.5)
-            .foregroundStyle(Deck.print.opacity(0.85))
-    }
-}
-
-/// A small dark button on the top edge.
-private struct CapStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(.caption, weight: .bold).width(.condensed))
-            .textCase(.uppercase)
-            .foregroundStyle(Color(hex: 0xF1ECE0))
-            .padding(.horizontal, 12)
-            .frame(minHeight: 44)
-            .background(LinearGradient(colors: [Color(hex: 0x3A3A3D), Color(hex: 0x1D1D1F)], startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 8))
-            .opacity(isEnabled ? 1 : 0.4)
-            .offset(y: configuration.isPressed ? 2 : 0)
-    }
-}
-
-private struct KeyLabel: View {
-    let systemImage: String
-    let text: String
-
-    var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: systemImage).font(.title2)
-            Text(text).font(.system(.caption2, weight: .bold).width(.condensed)).tracking(1.5)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-    }
-}
-
-/// A chunky piano key. The main key is orange and can stay down.
-private struct KeyStyle: ButtonStyle {
-    var isMain = false
-    var isDown = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        let down = isDown || configuration.isPressed
-        let face = isMain ? [Color(hex: 0xF0692B), Color(hex: 0xC9460F)] : [Color(hex: 0xF7F3E8), Color(hex: 0xCFC7B3)]
-        let edge = isMain ? Color(hex: 0x7A2A08) : Color(hex: 0x8C8473)
-        configuration.label
-            .foregroundStyle(isMain ? .white : Deck.print)
-            .frame(maxWidth: .infinity, minHeight: 84)
-            .background {
-                UnevenRoundedRectangle(topLeadingRadius: 6, bottomLeadingRadius: 10, bottomTrailingRadius: 10, topTrailingRadius: 6)
-                    .fill(LinearGradient(colors: face, startPoint: .top, endPoint: .bottom))
-                    // The key's front edge, which disappears as it goes down.
-                    .shadow(color: edge, radius: 0, y: down ? 1 : 6)
-            }
-            .offset(y: down ? 5 : 0)
-            .animation(.snappy(duration: 0.12), value: down)
-    }
-}
-
 /// The cassette behind the player's door. Its reels show the Position and its hubs turn while
 /// the tape runs.
-private struct LoadedCassette: View {
+struct LoadedCassette: View {
     static let size = CGSize(width: 300, height: 188)
 
     let title: String

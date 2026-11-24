@@ -3,7 +3,7 @@ import DogearCore
 import SwiftUI
 
 /// Everything the reader can set for the whole app: their account, the reader's defaults,
-/// the player's keys, Downloads and versions. Paper cards on the Library's felt, each named
+/// the player's skin and keys, Downloads and versions. Paper cards on the Library's felt, each named
 /// by a leather tag.
 struct SettingsView: View {
     let session: Session
@@ -13,6 +13,8 @@ struct SettingsView: View {
     /// The same values the reader's own sheet edits, so the two never disagree.
     @State private var reading = ReadingPreferences.load()
     @State private var listening = ListeningPreferences.load()
+    /// The player reads the same key, so a new Player skin shows at once, even mid-listen.
+    @AppStorage(ListeningPreferences.skinKey) private var storedSkin: String?
     @State private var isShowingDownloads = false
 
     var body: some View {
@@ -167,6 +169,15 @@ struct SettingsView: View {
     // MARK: Listening
 
     @ViewBuilder private var listeningRows: some View {
+        SettingsRow {
+            Text("Player")
+            Spacer()
+            PaperSegments(
+                selection: Binding { PlayerSkin(stored: storedSkin) } set: { storedSkin = $0.rawValue },
+                choices: [("Pocket", PlayerSkin.pocket), ("Hi-fi deck", .hifi)]
+            )
+        }
+        RowRule()
         SettingsRow {
             Text("Skip back")
             Spacer()

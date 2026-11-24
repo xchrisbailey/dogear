@@ -30,6 +30,10 @@ A named point inside an audiobook's audio (embedded in an M4B) or a section of a
 A Book file stored on the device so it can be read or played without reaching the Server.
 _Avoid_: Offline copy, cache
 
+**Player skin**:
+How the audiobook player is drawn: the pocket tape player or the hi-fi deck. Every skin has the same controls; the listener picks one in Settings.
+_Avoid_: Theme (a later, app-wide look)
+
 ## Progress
 
 **Position**:
