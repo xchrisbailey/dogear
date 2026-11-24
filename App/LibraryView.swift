@@ -101,7 +101,10 @@ struct LibraryView: View {
                 if !shelved.isEmpty {
                     ShelfLabel("Ebooks")
                         .padding(.bottom, 10)
-                    ForEach(shelves, id: \.lowerBound) { shelf in
+                    // Keyed by a type of their own: shelves numbered 0, 11, … would otherwise share
+                    // ids with the cassettes' Book ids below, and the lazy stack then puts a shelf
+                    // in a cassette's place, leaving a gap in the rack with books drawn in it.
+                    ForEach(shelves, id: \.shelfID) { shelf in
                         BookShelf {
                             ForEach(shelf, id: \.self) { index in
                                 spine(spines[index], of: shelved[index], shelving)
@@ -344,6 +347,16 @@ struct LibraryView: View {
 
 /// Positions and Downloads by Book file, built once per update of the shelves. A large library
 /// otherwise searched every Position and Download for every spine on each progress tick.
+/// Which shelf of ebooks this is, by its first spine. Not a plain `Int`, so it never equals a
+/// Book's id in the same lazy stack.
+private struct ShelfID: Hashable {
+    let firstSpine: Int
+}
+
+private extension Range<Int> {
+    var shelfID: ShelfID { ShelfID(firstSpine: lowerBound) }
+}
+
 private struct ShelvingLookup {
     private let positions: [Int: [Position]]
     private let downloads: [Int: Download.State]
