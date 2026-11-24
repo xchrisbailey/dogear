@@ -31,7 +31,7 @@ A Book file stored on the device so it can be read or played without reaching th
 _Avoid_: Offline copy, cache
 
 **Player skin**:
-How the audiobook player is drawn: the pocket tape player, the hi-fi deck or the turntable. Every skin has the same controls; the listener picks one in Settings.
+How the audiobook player is drawn: the pocket tape player, the hi-fi deck, the turntable or the valve radio. Every skin has the same controls; the listener picks one in Settings.
 _Avoid_: Theme (a later, app-wide look)
 
 ## Progress

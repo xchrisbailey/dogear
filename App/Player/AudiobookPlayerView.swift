@@ -58,6 +58,7 @@ struct AudiobookPlayerView: View {
         case .pocket: PocketPlayer(model: model, controls: controls)
         case .hifi: HifiDeck(model: model, controls: controls)
         case .turntable: TurntableDeck(model: model, controls: controls)
+        case .radio: ValveRadio(model: model, controls: controls)
         }
     }
 
@@ -66,6 +67,7 @@ struct AudiobookPlayerView: View {
         case .pocket: PocketPlayer.background
         case .hifi: HifiDeck.background
         case .turntable: TurntableDeck.background
+        case .radio: ValveRadio.background
         }
     }
 
@@ -74,6 +76,7 @@ struct AudiobookPlayerView: View {
         case .pocket: Deck.orange
         case .hifi: Hifi.glow
         case .turntable: Walnut.brass
+        case .radio: Bakelite.dialLight
         }
     }
 
@@ -281,6 +284,17 @@ private struct StripLook {
             isDisplay = false
             print = Walnut.print
             key = Walnut.brassFace
+            keyLettering = Theme.ink
+            scheme = .dark
+        case .radio:
+            body = Bakelite.body
+            trim = Bakelite.brass
+            icon = "radio"
+            title = Bakelite.cream
+            titleFont = .system(.subheadline, design: .serif, weight: .bold)
+            isDisplay = false
+            print = Bakelite.cream.opacity(0.85)
+            key = Bakelite.ivory
             keyLettering = Theme.ink
             scheme = .dark
         }

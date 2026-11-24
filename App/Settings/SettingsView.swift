@@ -387,6 +387,7 @@ private struct SkinTiles: View {
                 tile(.pocket, name: "Pocket player")
                 tile(.hifi, name: "Hi-fi deck")
                 tile(.turntable, name: "Turntable")
+                tile(.radio, name: "Valve radio")
             }
         }
         .padding(.horizontal, 14)
@@ -486,6 +487,27 @@ private struct SkinThumbnail: View {
             .background(LinearGradient(colors: Walnut.plinth, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 4))
             .padding(6)
             .background(LinearGradient(colors: Walnut.wood, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
+        case .radio:
+            VStack(spacing: 6) {
+                UnevenRoundedRectangle(topLeadingRadius: 24, bottomLeadingRadius: 3, bottomTrailingRadius: 3, topTrailingRadius: 24)
+                    .fill(Bakelite.cloth)
+                    .overlay {
+                        HStack(spacing: 3) {
+                            ForEach(0 ..< 12, id: \.self) { _ in Bakelite.brass.frame(width: 2) }
+                        }
+                    }
+                    .overlay {
+                        Circle().strokeBorder(Bakelite.eye, lineWidth: 4).frame(width: 16, height: 16)
+                            .shadow(color: Bakelite.eye, radius: 4)
+                    }
+                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, bottomLeadingRadius: 3, bottomTrailingRadius: 3, topTrailingRadius: 24))
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Bakelite.dialLight)
+                    .overlay { Theme.ribbon.frame(width: 2).offset(x: -8) }
+                    .frame(height: 20)
+            }
+            .padding(10)
+            .background(LinearGradient(colors: Bakelite.body, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
         }
     }
 }

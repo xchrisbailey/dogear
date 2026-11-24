@@ -92,6 +92,8 @@ public enum PlayerSkin: String, Sendable, CaseIterable {
     case hifi
     /// The walnut record deck, with the Book as an LP and the tonearm showing how far through.
     case turntable
+    /// The 1950s valve radio, with Chapters as stations along a lit dial.
+    case radio
 
     public static let standard = PlayerSkin.pocket
 
