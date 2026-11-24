@@ -151,10 +151,15 @@ final class PDFReaderModel: PDFNavigatorDelegate {
         }
     }
 
-    /// Pushes the last page read now rather than after the delay. Failures stay in the Outbox.
     func close() async {
         if let fetched { try? FileManager.default.removeItem(at: fetched) }
         fetched = nil
+        await sendNow()
+    }
+
+    /// Pushes the last page read now rather than after the delay, on closing or leaving the app.
+    /// Failures stay in the Outbox.
+    func sendNow() async {
         pushing?.cancel()
         await recorder.finished()
         guard let positions, let sharedPositions else { return }

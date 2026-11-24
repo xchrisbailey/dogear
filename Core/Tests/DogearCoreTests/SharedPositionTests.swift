@@ -43,6 +43,21 @@ struct SharedPositionTests {
         #expect(fileProgress["contentSourceProgressPercent"] as? Double == 50)
     }
 
+    @Test func aProgressJSONCannotHoldIsSentAsZeroRatherThanAnEmptyBody() async throws {
+        let shared = try await signedIn()
+        let position = Position(
+            bookFileID: 4,
+            location: .epub(EPUBLocation(href: "OEBPS/ch01.xhtml", throughChapter: .nan, throughBook: .infinity, cfi: "epubcfi(/6/8!/4/2/1:0)")),
+            recordedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+
+        try await shared.push(position, bookID: 4)
+
+        let fileProgress = try #require(server.requests.last?.json?["fileProgress"] as? [String: any Sendable])
+        #expect(fileProgress["progressPercent"] as? Double == 0)
+        #expect(fileProgress["contentSourceProgressPercent"] as? Double == 0)
+    }
+
     @Test func webReadersPositionComesBackWithItsCFIAndFallbacks() async throws {
         let shared = try await signedIn()
         server.holdSharedPosition(bookID: 4, fixture: "app-progress-epub")

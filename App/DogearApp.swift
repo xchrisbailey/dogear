@@ -232,6 +232,11 @@ final class AppModel {
         await showContinueRows()
     }
 
+    /// Leaving the app: only the Outbox, so the time iOS gives goes to the Positions.
+    func sendPositions() async {
+        try? await positions?.flushOutbox(to: sharedPositions)
+    }
+
     /// Recomputes the rows from the cache and this device's Positions, which works offline.
     func showContinueRows() async {
         recordedPositions = await positions?.all() ?? []
@@ -295,6 +300,8 @@ struct RootView: View {
                 }
                 // Here and not in the player, which may be closed while its audiobook is loaded.
                 Task { await model.nowPlaying?.player.catchUp() }
+            } else if phase == .background {
+                BackgroundTime.finish("Send reading positions") { await model.sendPositions() }
             }
         }
     }

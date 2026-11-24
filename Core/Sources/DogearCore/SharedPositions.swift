@@ -18,15 +18,15 @@ public struct SharedPositions: Sendable {
                 bookFileId: position.bookFileID,
                 positionData: location.cfi,
                 positionHref: location.href,
-                progressPercent: location.throughBook * 100,
-                contentSourceProgressPercent: location.throughChapter * 100
+                progressPercent: percent(location.throughBook),
+                contentSourceProgressPercent: percent(location.throughChapter)
             ))
         case let .pdf(location):
             // The Server parses `positionData` as an integer for PDFs.
             body = FileProgressUpdate(fileProgress: .init(
                 bookFileId: position.bookFileID,
                 positionData: String(location.page),
-                progressPercent: location.throughBook * 100
+                progressPercent: percent(location.throughBook)
             ))
         case let .audiobook(location):
             body = FileProgressUpdate(fileProgress: .init(
@@ -34,7 +34,7 @@ public struct SharedPositions: Sendable {
                 positionData: String(location.milliseconds),
                 positionHref: String(location.trackIndex),
                 // Rounded to 0.1 like the web player's saves.
-                progressPercent: (location.throughBook * 1000).rounded() / 10
+                progressPercent: (percent(location.throughBook) * 10).rounded() / 10
             ))
         }
         var request = try await request(bookID: bookID)
@@ -42,6 +42,12 @@ public struct SharedPositions: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONEncoder().encode(body)
         try await account.deliver(request)
+    }
+
+    /// 0…100. JSON has no NaN or infinity, so one would leave the body empty and the Server would
+    /// refuse the push, holding up the Outbox behind it.
+    private func percent(_ fraction: Double) -> Double {
+        fraction.isFinite ? min(max(fraction, 0), 1) * 100 : 0
     }
 
     /// The Book file's Shared position in `format`, or nil if it was never read anywhere.

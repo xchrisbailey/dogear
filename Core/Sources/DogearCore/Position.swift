@@ -24,6 +24,12 @@ public struct Position: Codable, Sendable, Equatable {
             }
         }
 
+        /// Whether the Server can hand this spot back. It reads an EPUB's Shared position only
+        /// when it has a CFI, and a push without one clears the CFI it held (`AppBookMapper.mapEpubProgress`).
+        var canBeShared: Bool {
+            if case let .epub(location) = self { location.cfi != nil } else { true }
+        }
+
         /// Whether `other` is this spot as the Server hands it back: it keeps less than the
         /// device records (no reader state, no spot in the Chapter), so only what it keeps is compared.
         func isSameSpot(as other: Location) -> Bool {

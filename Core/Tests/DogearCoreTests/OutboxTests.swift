@@ -100,6 +100,20 @@ struct OutboxTests {
         #expect(pushes.map(pushed).map(\.percent) == [30])
     }
 
+    @Test func epubPositionWithoutACFIStaysOnTheDeviceSoItCannotEraseTheSharedPosition() async throws {
+        let shared = try await signedIn()
+        let reading = try positions()
+        // The page couldn't run scripts, so there's no CFI. The Server keeps an EPUB's Shared
+        // position only with one: pushed, this would leave other devices nothing to open at.
+        let withoutCFI = Position.Location.epub(EPUBLocation(href: "OEBPS/ch03.xhtml", throughChapter: 0.5, throughBook: 0.3))
+        try await reading.record(withoutCFI, bookFileID: 4, bookID: 4)
+
+        #expect(await reading.outboxCount() == 0)
+        #expect(await reading.latest(bookFileID: 4)?.location == withoutCFI)
+        try await reading.flushOutbox(to: shared)
+        #expect(pushes.isEmpty)
+    }
+
     @Test func outboxOutlivesAnExpiredSignInAndFlushesAfterSigningInAgain() async throws {
         let shared = try await signedIn()
         server.expireAccessTokens()

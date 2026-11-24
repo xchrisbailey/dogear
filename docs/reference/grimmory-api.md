@@ -102,6 +102,7 @@ Source: Grimmory v3.5.0 (`git clone --branch v3.5.0 https://github.com/grimmory-
   - `epubProgress {cfi, href, percentage, updatedAt}` and `pdfProgress {page, percentage, updatedAt}`: per-**Book** columns; `updatedAt` = per-Book `lastReadTime`.
   - `audiobookProgress {positionMs, trackIndex, percentage, updatedAt}`: the most recent audiobook **file** row (`UserBookFileProgressRepository.findMostRecentAudiobookProgressByUserIdAndBookId`); `updatedAt` is that file's time.
   - `lastReadTime` moves on **any** save for any file of the Book.
+  - `epubProgress` is left out whenever the per-Book CFI column is null (`mapEpubProgress` checks `getEpubProgress()`), and an EPUB push with no `positionData` nulls it. So an EPUB push without a CFI erases the Shared position for every reader; Dogear keeps such Positions on the device (`Positions.record`).
 - The web reader's `href` carries a `#fragment` (TOC/page-list href); strip it (`app-progress-epub.json`).
 - Stale entry check (ADR 0002) compares against the matching format's `updatedAt`. For EPUB/PDF that is still the per-Book time, which also moves when another file of the Book is read: the best v3.5.0 offers. A Book with two EPUBs or two audiobooks can't be told apart; out of scope.
 

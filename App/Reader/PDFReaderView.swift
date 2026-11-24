@@ -31,7 +31,12 @@ struct PDFReaderView: View {
         .task { await model.open() }
         .onDisappear { Task { await model.close() } }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.catchUp() } }
+            switch phase {
+            case .active: Task { await model.catchUp() }
+            // The page just turned may still be waiting for the push delay.
+            case .background: BackgroundTime.finish("Send the last page read") { await model.sendNow() }
+            default: break
+            }
         }
     }
 
