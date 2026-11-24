@@ -383,9 +383,10 @@ private struct SkinTiles: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Player")
-            HStack(spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 10)], spacing: 10) {
                 tile(.pocket, name: "Pocket player")
                 tile(.hifi, name: "Hi-fi deck")
+                tile(.turntable, name: "Turntable")
             }
         }
         .padding(.horizontal, 14)
@@ -466,6 +467,25 @@ private struct SkinThumbnail: View {
             }
             .padding(10)
             .background(LinearGradient(colors: Hifi.panel, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
+        case .turntable:
+            HStack(spacing: 0) {
+                ZStack {
+                    Circle().fill(Walnut.platter[1])
+                    Circle().fill(Walnut.vinyl[1]).padding(3)
+                    Circle().fill(Theme.ribbon).frame(width: 22, height: 22)
+                }
+                .frame(width: 70, height: 70)
+                Capsule()
+                    .fill(Walnut.platter[0])
+                    .frame(width: 4, height: 62)
+                    .rotationEffect(.degrees(28), anchor: .top)
+                    .offset(x: -6, y: -2)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(4)
+            .background(LinearGradient(colors: Walnut.plinth, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 4))
+            .padding(6)
+            .background(LinearGradient(colors: Walnut.wood, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
         }
     }
 }

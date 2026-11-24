@@ -90,6 +90,8 @@ public enum PlayerSkin: String, Sendable, CaseIterable {
     case pocket
     /// The stereo cassette deck with a glowing display and level meters.
     case hifi
+    /// The walnut record deck, with the Book as an LP and the tonearm showing how far through.
+    case turntable
 
     public static let standard = PlayerSkin.pocket
 

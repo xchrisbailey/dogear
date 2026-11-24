@@ -36,8 +36,8 @@ struct AudiobookPlayerView: View {
             }
             .background { skinBackground.ignoresSafeArea() }
             // Each skin is its own plastic or metal whatever the device's appearance.
-            .environment(\.colorScheme, skin == .hifi ? .dark : .light)
-            .tint(skin == .hifi ? Hifi.glow : Deck.orange)
+            .environment(\.colorScheme, skin == .pocket ? .light : .dark)
+            .tint(tint)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $isShowingChapters) {
                 ChaptersView(model: model)
@@ -57,6 +57,7 @@ struct AudiobookPlayerView: View {
         switch skin {
         case .pocket: PocketPlayer(model: model, controls: controls)
         case .hifi: HifiDeck(model: model, controls: controls)
+        case .turntable: TurntableDeck(model: model, controls: controls)
         }
     }
 
@@ -64,6 +65,15 @@ struct AudiobookPlayerView: View {
         switch skin {
         case .pocket: PocketPlayer.background
         case .hifi: HifiDeck.background
+        case .turntable: TurntableDeck.background
+        }
+    }
+
+    private var tint: Color {
+        switch skin {
+        case .pocket: Deck.orange
+        case .hifi: Hifi.glow
+        case .turntable: Walnut.brass
         }
     }
 
@@ -159,7 +169,7 @@ struct NowPlayingBar: View {
     @Environment(AppModel.self) private var app
     @AppStorage(ListeningPreferences.skinKey) private var storedSkin: String?
 
-    private var isHifi: Bool { PlayerSkin(stored: storedSkin) == .hifi }
+    private var look: StripLook { StripLook(PlayerSkin(stored: storedSkin)) }
 
     private var detail: String? {
         player.placeName ?? player.author
@@ -169,25 +179,19 @@ struct NowPlayingBar: View {
         HStack(spacing: 12) {
             Button(action: open) {
                 HStack(spacing: 10) {
-                    Image(systemName: "recordingtape")
+                    Image(systemName: look.icon)
                         .font(.title2)
-                        .foregroundStyle(isHifi ? Hifi.print : Deck.print)
+                        .foregroundStyle(look.print)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 1) {
-                        if isHifi {
-                            Text(player.title.uppercased())
-                                .font(.system(.subheadline, design: .monospaced, weight: .semibold))
-                                .foregroundStyle(Hifi.glow)
-                                .shadow(color: Hifi.glow.opacity(0.6), radius: 4)
-                        } else {
-                            Text(player.title)
-                                .font(Theme.label(.subheadline))
-                                .foregroundStyle(Theme.pen)
-                        }
+                        Text(look.isDisplay ? player.title.uppercased() : player.title)
+                            .font(look.titleFont)
+                            .foregroundStyle(look.title)
+                            .shadow(color: look.isDisplay ? look.title.opacity(0.6) : .clear, radius: 4)
                         if let detail {
                             Text(detail)
                                 .font(.system(.caption, weight: .bold).width(.condensed))
-                                .foregroundStyle(isHifi ? Hifi.print : Deck.print.opacity(0.85))
+                                .foregroundStyle(look.print)
                         }
                     }
                     .lineLimit(1)
@@ -204,22 +208,16 @@ struct NowPlayingBar: View {
             }
             .labelStyle(.iconOnly)
             .font(.title3)
-            .foregroundStyle(isHifi ? Hifi.lettering : .white)
+            .foregroundStyle(look.keyLettering)
             .frame(width: 44, height: 44)
-            .background(
-                LinearGradient(colors: isHifi ? Hifi.key : [Color(hex: 0xF0692B), Color(hex: 0xC9460F)], startPoint: .top, endPoint: .bottom),
-                in: .circle
-            )
+            .background(LinearGradient(colors: look.key, startPoint: .top, endPoint: .bottom), in: .circle)
             .disabled(!isReady)
         }
         .padding(.leading, 14)
         .padding(.trailing, 8)
         .padding(.vertical, 6)
-        .background(
-            LinearGradient(colors: isHifi ? Hifi.panel : [Deck.bodyLight, Deck.bodyDark], startPoint: .top, endPoint: .bottom),
-            in: .rect(cornerRadius: 12)
-        )
-        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(isHifi ? Hifi.bezel : Deck.trim, lineWidth: 1) }
+        .background(LinearGradient(colors: look.body, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(look.trim, lineWidth: 1) }
         .shadow(color: .black.opacity(0.5), radius: 8, y: 4)
         .contextMenu {
             Button("Eject", systemImage: "eject.fill") { Task { await app.eject() } }
@@ -227,12 +225,65 @@ struct NowPlayingBar: View {
         .accessibilityAction(named: "Eject") { Task { await app.eject() } }
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
-        // The skin's plastic or metal whatever the device's appearance, like the player.
-        .environment(\.colorScheme, isHifi ? .dark : .light)
+        // The skin's own materials whatever the device's appearance, like the player.
+        .environment(\.colorScheme, look.scheme)
     }
 
     private var isReady: Bool {
         if case .ready = player.state { true } else { false }
+    }
+}
+
+/// How the now-playing strip is drawn for each Player skin.
+private struct StripLook {
+    let body: [Color]
+    let trim: Color
+    let icon: String
+    let title: Color
+    let titleFont: Font
+    /// Lettered like a glowing display rather than a label.
+    let isDisplay: Bool
+    let print: Color
+    let key: [Color]
+    let keyLettering: Color
+    let scheme: ColorScheme
+
+    init(_ skin: PlayerSkin) {
+        switch skin {
+        case .pocket:
+            body = [Deck.bodyLight, Deck.bodyDark]
+            trim = Deck.trim
+            icon = "recordingtape"
+            title = Theme.pen
+            titleFont = Theme.label(.subheadline)
+            isDisplay = false
+            print = Deck.print.opacity(0.85)
+            key = [Color(hex: 0xF0692B), Color(hex: 0xC9460F)]
+            keyLettering = .white
+            scheme = .light
+        case .hifi:
+            body = Hifi.panel
+            trim = Hifi.bezel
+            icon = "recordingtape"
+            title = Hifi.glow
+            titleFont = .system(.subheadline, design: .monospaced, weight: .semibold)
+            isDisplay = true
+            print = Hifi.print
+            key = Hifi.key
+            keyLettering = Hifi.lettering
+            scheme = .dark
+        case .turntable:
+            body = Walnut.wood
+            trim = Walnut.brassEdge
+            icon = "opticaldisc"
+            title = Theme.paper
+            titleFont = .system(.subheadline, design: .serif, weight: .bold)
+            isDisplay = false
+            print = Walnut.print
+            key = Walnut.brassFace
+            keyLettering = Theme.ink
+            scheme = .dark
+        }
     }
 }
 

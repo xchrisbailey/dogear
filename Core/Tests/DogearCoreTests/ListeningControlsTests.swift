@@ -87,6 +87,7 @@ struct ListeningControlsTests {
     @Test func savedPlayerSkinComesBack() {
         #expect(PlayerSkin(stored: "hifi") == .hifi)
         #expect(PlayerSkin(stored: "pocket") == .pocket)
+        #expect(PlayerSkin(stored: "turntable") == .turntable)
     }
 
     /// Nothing saved yet, or a skin this Dogear doesn't know, shows the pocket player.
