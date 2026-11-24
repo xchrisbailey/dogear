@@ -560,6 +560,8 @@ enum ListeningPreferences {
     private static let speedKey = "playbackSpeed"
     private static let skipBackKey = "player.skipBackSeconds"
     private static let skipForwardKey = "player.skipForwardSeconds"
+    /// Read through `@AppStorage` by the player and Settings, so a change shows at once.
+    static let skinKey = "player.skin"
 
     static func load() -> ListeningSettings {
         let defaults = UserDefaults.standard

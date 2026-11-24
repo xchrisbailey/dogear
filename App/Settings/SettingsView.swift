@@ -3,7 +3,7 @@ import DogearCore
 import SwiftUI
 
 /// Everything the reader can set for the whole app: their account, the reader's defaults,
-/// the player's keys, Downloads and versions. Paper cards on the Library's felt, each named
+/// the player's skin and keys, Downloads and versions. Paper cards on the Library's felt, each named
 /// by a leather tag.
 struct SettingsView: View {
     let session: Session
@@ -13,6 +13,8 @@ struct SettingsView: View {
     /// The same values the reader's own sheet edits, so the two never disagree.
     @State private var reading = ReadingPreferences.load()
     @State private var listening = ListeningPreferences.load()
+    /// The player reads the same key, so a new Player skin shows at once, even mid-listen.
+    @AppStorage(ListeningPreferences.skinKey) private var storedSkin: String?
     @State private var isShowingDownloads = false
 
     var body: some View {
@@ -167,6 +169,8 @@ struct SettingsView: View {
     // MARK: Listening
 
     @ViewBuilder private var listeningRows: some View {
+        SkinTiles(selection: Binding { PlayerSkin(stored: storedSkin) } set: { storedSkin = $0.rawValue })
+        RowRule()
         SettingsRow {
             Text("Skip back")
             Spacer()
@@ -368,5 +372,142 @@ private struct PaperSegments<Value: Hashable>: View {
         .padding(2)
         .background(Theme.ink.opacity(0.12), in: .rect(cornerRadius: 7))
         .animation(.snappy(duration: 0.15), value: selection)
+    }
+}
+
+/// The Player skins as small drawings of each player to tap; the chosen one sits in a leather
+/// frame.
+private struct SkinTiles: View {
+    @Binding var selection: PlayerSkin
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Player")
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 10)], spacing: 10) {
+                tile(.pocket, name: "Pocket player")
+                tile(.hifi, name: "Hi-fi deck")
+                tile(.turntable, name: "Turntable")
+                tile(.radio, name: "Valve radio")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 12)
+        .padding(.bottom, 14)
+        .sensoryFeedback(.selection, trigger: selection)
+        .animation(.snappy(duration: 0.15), value: selection)
+    }
+
+    private func tile(_ skin: PlayerSkin, name: String) -> some View {
+        let isOn = skin == selection
+        return Button { selection = skin } label: {
+            VStack(spacing: 6) {
+                SkinThumbnail(skin: skin)
+                    .frame(height: 92)
+                    .accessibilityHidden(true)
+                Text(name)
+                    .font(.subheadline.weight(isOn ? .semibold : .regular))
+                    .foregroundStyle(isOn ? Theme.ink : Theme.inkSoft)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity)
+            .background(isOn ? Theme.tabLeather[0].opacity(0.14) : Theme.ink.opacity(0.06), in: .rect(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(isOn ? Theme.tabLeather[0] : .clear, lineWidth: 2)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(name)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
+/// A small drawing of a Player skin: its body, its window and its keys.
+private struct SkinThumbnail: View {
+    let skin: PlayerSkin
+
+    var body: some View {
+        switch skin {
+        case .pocket:
+            VStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(LinearGradient(colors: [Color(hex: 0x2A2C30), Color(hex: 0x0E0F11)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .overlay { RoundedRectangle(cornerRadius: 5).strokeBorder(Deck.trim, lineWidth: 2) }
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 3).fill(Color(hex: 0xF7F3E8))
+                    RoundedRectangle(cornerRadius: 3).fill(Deck.orange)
+                    RoundedRectangle(cornerRadius: 3).fill(Color(hex: 0xF7F3E8))
+                }
+                .frame(height: 20)
+            }
+            .padding(10)
+            .background(LinearGradient(colors: [Deck.bodyLight, Deck.bodyDark], startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
+        case .hifi:
+            VStack(spacing: 4) {
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Hifi.well)
+                    .overlay { RoundedRectangle(cornerRadius: 3).strokeBorder(Hifi.bezel, lineWidth: 1.5) }
+                Text("01:24:35")
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(Hifi.glow)
+                    .shadow(color: Hifi.glow.opacity(0.8), radius: 3)
+                    .padding(.horizontal, 6)
+                    .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
+                    .background(Hifi.display[0], in: .rect(cornerRadius: 3))
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 3).fill(LinearGradient(colors: Hifi.key, startPoint: .top, endPoint: .bottom))
+                    RoundedRectangle(cornerRadius: 3).fill(LinearGradient(colors: Hifi.key, startPoint: .top, endPoint: .bottom))
+                        .frame(maxWidth: .infinity)
+                        .layoutPriority(1)
+                    RoundedRectangle(cornerRadius: 3).fill(LinearGradient(colors: Hifi.key, startPoint: .top, endPoint: .bottom))
+                }
+                .frame(height: 16)
+            }
+            .padding(10)
+            .background(LinearGradient(colors: Hifi.panel, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
+        case .turntable:
+            HStack(spacing: 0) {
+                ZStack {
+                    Circle().fill(Walnut.platter[1])
+                    Circle().fill(Walnut.vinyl[1]).padding(3)
+                    Circle().fill(Theme.ribbon).frame(width: 22, height: 22)
+                }
+                .frame(width: 70, height: 70)
+                Capsule()
+                    .fill(Walnut.platter[0])
+                    .frame(width: 4, height: 62)
+                    .rotationEffect(.degrees(28), anchor: .top)
+                    .offset(x: -6, y: -2)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(4)
+            .background(LinearGradient(colors: Walnut.plinth, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 4))
+            .padding(6)
+            .background(LinearGradient(colors: Walnut.wood, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
+        case .radio:
+            VStack(spacing: 6) {
+                UnevenRoundedRectangle(topLeadingRadius: 24, bottomLeadingRadius: 3, bottomTrailingRadius: 3, topTrailingRadius: 24)
+                    .fill(Bakelite.cloth)
+                    .overlay {
+                        HStack(spacing: 3) {
+                            ForEach(0 ..< 12, id: \.self) { _ in Bakelite.brass.frame(width: 2) }
+                        }
+                    }
+                    .overlay {
+                        Circle().strokeBorder(Bakelite.eye, lineWidth: 4).frame(width: 16, height: 16)
+                            .shadow(color: Bakelite.eye, radius: 4)
+                    }
+                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, bottomLeadingRadius: 3, bottomTrailingRadius: 3, topTrailingRadius: 24))
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Bakelite.dialLight)
+                    .overlay { Theme.ribbon.frame(width: 2).offset(x: -8) }
+                    .frame(height: 20)
+            }
+            .padding(10)
+            .background(LinearGradient(colors: Bakelite.body, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
+        }
     }
 }

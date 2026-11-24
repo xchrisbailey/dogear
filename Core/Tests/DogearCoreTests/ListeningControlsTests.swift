@@ -83,4 +83,17 @@ struct ListeningControlsTests {
         #expect(settings.skipForward == .seconds(30))
         #expect(settings.speed == 1)
     }
+
+    @Test func savedPlayerSkinComesBack() {
+        #expect(PlayerSkin(stored: "hifi") == .hifi)
+        #expect(PlayerSkin(stored: "pocket") == .pocket)
+        #expect(PlayerSkin(stored: "turntable") == .turntable)
+        #expect(PlayerSkin(stored: "radio") == .radio)
+    }
+
+    /// Nothing saved yet, or a skin this Dogear doesn't know, shows the pocket player.
+    @Test(arguments: [nil, "", "walkman"] as [String?])
+    func unknownPlayerSkinFallsBackToThePocketPlayer(stored: String?) {
+        #expect(PlayerSkin(stored: stored) == .pocket)
+    }
 }
