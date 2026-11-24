@@ -17,10 +17,13 @@ public actor Positions {
 
     /// Saves `location` as the latest Position in the Book file, stamped with the device time,
     /// and adds it to the Outbox. Every format records its Positions through here.
+    ///
+    /// An EPUB Position without a CFI stays on the device: the Server keeps an EPUB's Shared
+    /// position only with one, so sharing it would erase the place other devices open at.
     @discardableResult
     public func record(_ location: Position.Location, bookFileID: Int, bookID: Int) async throws -> Position {
         let position = Position(bookFileID: bookFileID, location: location, recordedAt: clock.now())
-        try await cache.save(position, outboxBookID: bookID)
+        try await cache.save(position, outboxBookID: location.canBeShared ? bookID : nil)
         await announceOutboxCount()
         announceChange()
         return position
