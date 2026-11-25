@@ -1,4 +1,7 @@
 name: Dogear
+configFiles:
+  Debug: Config/Version.xcconfig
+  Release: Config/Version.xcconfig
 options:
   bundleIdPrefix: computer.srcery
   deploymentTarget:
@@ -14,8 +17,8 @@ settings:
     # Device and archive builds sign automatically with this team.
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: 5U2B7W5F39
-    MARKETING_VERSION: "0.1.0"
-    # scripts/testflight.sh overrides this per upload; TestFlight needs it to increase.
+    # MARKETING_VERSION lives in Config/Version.xcconfig: bumping it starts a TestFlight build.
+    # Xcode Cloud and scripts/testflight.sh override this per upload; TestFlight needs it to increase.
     CURRENT_PROJECT_VERSION: "1"
 packages:
   Readium:
