@@ -84,6 +84,14 @@ struct PocketDrawing: View {
         }
         .frame(width: 1000 * u, height: 300 * u, alignment: .topLeading)
         .shadow(color: Self.shade.opacity(0.3), radius: 2.5 * u, x: 3 * u, y: 6 * u)
+        // The ring the strap is looped through, showing above the corner.
+        Ellipse()
+            .strokeBorder(
+                LinearGradient(colors: [Color(hex: 0xD9D2C4), Color(hex: 0x8F877A), Color(hex: 0xC4BBAA)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                lineWidth: max(7 * u, 2)
+            )
+            .shadow(color: Self.shade.opacity(0.35), radius: u, x: 2 * u, y: 3 * u)
+            .at(8, 96, 84, 104, unit: u)
         Knob(unit: u).at(665, top - 26, 95, 30, unit: u)
         Knob(unit: u).at(800, top - 42, 95, 46, unit: u)
         Molded(color: palette.shell, radius: 72, depth: 14, unit: u, grain: contrast != .increased)
@@ -92,14 +100,6 @@ struct PocketDrawing: View {
         RoundedRectangle(cornerRadius: 58 * u, style: .continuous)
             .strokeBorder(.white.opacity(0.22), lineWidth: max(1.5 * u, 0.5))
             .at(16, top + 16, 968, 748, unit: u)
-        // The ring the strap is looped through, hanging over the corner.
-        Ellipse()
-            .strokeBorder(
-                LinearGradient(colors: [Color(hex: 0xD9D2C4), Color(hex: 0x8F877A), Color(hex: 0xC4BBAA)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                lineWidth: max(7 * u, 2)
-            )
-            .shadow(color: Self.shade.opacity(0.35), radius: u, x: 2 * u, y: 3 * u)
-            .at(0, 137, 60, 156, unit: u)
         Text("DOGEAR")
             .font(.system(size: 40 * u, weight: .regular, design: .serif))
             .tracking(9 * u)
@@ -215,7 +215,7 @@ struct PocketDrawing: View {
         let w: CGFloat = 828 * u
         let h: CGFloat = 440 * u
         let labelSize = CGSize(width: w - 88 * u, height: h - 118 * u)
-        let reelWindow = CGSize(width: labelSize.width * 0.72, height: labelSize.height * 0.36)
+        let reelWindow = CGSize(width: labelSize.width * 0.64, height: labelSize.height * 0.36)
         let hub = reelWindow.height * 0.4
         let shape = RoundedRectangle(cornerRadius: 30 * u, style: .continuous)
         return ZStack(alignment: .topLeading) {
@@ -242,7 +242,7 @@ struct PocketDrawing: View {
                         .frame(height: labelSize.height * 0.36)
                     HStack(spacing: 0) {
                         Sprig(color: Color(hex: 0x6F8A57), bloom: Color(hex: 0xE9C46A))
-                            .frame(width: labelSize.width * 0.12, height: labelSize.height * 0.44)
+                            .frame(width: labelSize.width * 0.16, height: labelSize.height * 0.44)
                         Spacer(minLength: 0)
                         ZStack {
                             Capsule().fill(
@@ -266,7 +266,7 @@ struct PocketDrawing: View {
                         .shadow(color: .white.opacity(0.8), radius: 0, y: 1.5 * u)
                         Spacer(minLength: 0)
                         Sprig(color: Color(hex: 0x6F8A57), bloom: Color(hex: 0xD98A74))
-                            .frame(width: labelSize.width * 0.12, height: labelSize.height * 0.44)
+                            .frame(width: labelSize.width * 0.16, height: labelSize.height * 0.44)
                             .scaleEffect(x: -1)
                     }
                     .padding(.horizontal, labelSize.width * 0.015)
@@ -494,7 +494,7 @@ private struct Molded: View {
                 .shadow(.inner(color: Color(hex: 0x503214).opacity(0.24), radius: 5 * u, x: -4 * u, y: -6 * u))
             )
             if grain {
-                Speckle(density: 9, opacity: 0.035).clipShape(shape)
+                Speckle(density: 9, opacity: 0.02).clipShape(shape)
             }
         }
     }
