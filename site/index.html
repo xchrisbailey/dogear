@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dogear: read and listen to your Grimmory library on iPhone and iPad</title>
+  <meta name="description" content="Dogear is a native iPhone and iPad app for reading ebooks and listening to audiobooks from your self-hosted Grimmory server, with offline downloads and progress that stays in step with Grimmory's web reader.">
+  <meta name="theme-color" content="#efe5d2">
+  <link rel="canonical" href="https://dogear.srcery.computer/">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Dogear">
+  <meta property="og:description" content="Your Grimmory library, on your iPhone and iPad. Ebooks, audiobooks, offline downloads and progress that follows you.">
+  <meta property="og:url" content="https://dogear.srcery.computer/">
+  <meta property="og:image" content="https://dogear.srcery.computer/og.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <style>
+    :root {
+      --paper: #efe5d2;
+      --paper-light: #f7f0e2;
+      --paper-dark: #e3d5bb;
+      --ink: #2e1d14;
+      --ink-soft: #6b5446;
+      --walnut: #5a3320;
+      --walnut-dark: #3a1f13;
+      --teal: #0e5a50;
+      --teal-dark: #0a4038;
+      --rule: rgba(46, 29, 20, .16);
+      --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      --wrap: 1080px;
+    }
+
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font: 18px/1.6 var(--serif);
+      /* faint paper grain */
+      background-image:
+        radial-gradient(rgba(90, 51, 32, .035) 1px, transparent 1px),
+        radial-gradient(rgba(90, 51, 32, .03) 1px, transparent 1px);
+      background-size: 7px 7px, 11px 11px;
+      background-position: 0 0, 3px 5px;
+    }
+    a { color: var(--teal); text-underline-offset: .18em; }
+    a:hover { color: var(--teal-dark); }
+    img { max-width: 100%; height: auto; display: block; }
+    .wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 24px; }
+
+    .smallcaps {
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--ink-soft);
+    }
+
+    /* Header */
+    header.top { padding: 22px 0; }
+    header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; }
+    .brand img { width: 40px; height: 40px; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+    .brand span { font-size: 22px; letter-spacing: .02em; }
+    nav a { font-family: var(--sans); font-size: 15px; color: var(--ink); text-decoration: none; margin-left: 20px; }
+    nav a:hover { color: var(--teal); }
+
+    /* Hero */
+    .hero { padding: 40px 0 24px; }
+    .hero .wrap { display: grid; grid-template-columns: 1fr 1.05fr; gap: 48px; align-items: center; }
+    .hero h1 {
+      font-weight: 400;
+      font-size: clamp(40px, 6vw, 64px);
+      line-height: 1.05;
+      margin: 14px 0 20px;
+      letter-spacing: -.01em;
+    }
+    .hero h1 em { color: var(--teal); }
+    .lede { font-size: 20px; color: var(--ink-soft); margin: 0 0 28px; max-width: 32em; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .button {
+      display: inline-flex; align-items: center; gap: 10px;
+      font-family: var(--sans); font-size: 16px; font-weight: 600;
+      padding: 13px 22px; border-radius: 999px; text-decoration: none;
+      background: var(--teal); color: var(--paper-light);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 2px 6px rgba(14,90,80,.3);
+    }
+    .button:hover { background: var(--teal-dark); color: var(--paper-light); }
+    .button svg { width: 18px; height: 18px; fill: currentColor; }
+    .status {
+      font-family: var(--sans); font-size: 14px; color: var(--ink-soft);
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .status::before {
+      content: ""; width: 8px; height: 8px; border-radius: 50%;
+      background: #c9822e; box-shadow: 0 0 0 3px rgba(201,130,46,.2);
+    }
+    .board {
+      margin: 0;
+      background: var(--paper-light);
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, 0 24px 50px -20px rgba(58,31,19,.45), 0 2px 6px rgba(58,31,19,.12);
+      transform: rotate(.6deg);
+    }
+    .board img { border-radius: 10px; }
+    .board figcaption { text-align: center; padding-top: 10px; font-style: italic; font-size: 14px; color: var(--ink-soft); }
+
+    /* Section headings */
+    section { padding: 72px 0; }
+    .section-head { text-align: center; max-width: 640px; margin: 0 auto 40px; }
+    .section-head h2 { font-weight: 400; font-size: clamp(30px, 4vw, 42px); line-height: 1.15; margin: 10px 0 12px; }
+    .section-head p { color: var(--ink-soft); margin: 0; }
+    .ornament { display: flex; align-items: center; justify-content: center; gap: 14px; }
+    .ornament::before, .ornament::after { content: ""; height: 1px; width: 48px; background: var(--rule); }
+
+    /* Walnut shelf of feature "books" */
+    .cabinet {
+      background:
+        repeating-linear-gradient(92deg, rgba(0,0,0,.06) 0 2px, transparent 2px 9px),
+        repeating-linear-gradient(88deg, rgba(255,255,255,.03) 0 1px, transparent 1px 13px),
+        linear-gradient(180deg, #6a3d26, var(--walnut) 40%, var(--walnut-dark));
+      border-radius: 16px;
+      padding: 22px 22px 0;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.25), inset 0 12px 30px rgba(0,0,0,.35), 0 20px 40px -24px rgba(58,31,19,.7);
+    }
+    .shelf {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      padding-bottom: 22px;
+      margin-bottom: 22px;
+      border-bottom: 10px solid #2f190f;
+      box-shadow: 0 6px 0 -2px rgba(0,0,0,.25);
+    }
+    .shelf:last-child { margin-bottom: 0; }
+    .book {
+      --cloth: #2f5a3e;
+      position: relative;
+      color: #f4e8cf;
+      background:
+        repeating-linear-gradient(45deg, rgba(255,255,255,.035) 0 1px, transparent 1px 3px),
+        repeating-linear-gradient(-45deg, rgba(0,0,0,.06) 0 1px, transparent 1px 3px),
+        linear-gradient(90deg, rgba(0,0,0,.28), rgba(255,255,255,.06) 8%, rgba(0,0,0,0) 20%, rgba(0,0,0,.12)),
+        var(--cloth);
+      border-radius: 4px 8px 8px 4px;
+      padding: 22px 22px 22px 30px;
+      box-shadow: inset 6px 0 0 rgba(0,0,0,.18), 0 2px 4px rgba(0,0,0,.4);
+    }
+    .book::before {
+      /* gilt bands */
+      content: ""; position: absolute; left: 30px; right: 22px; top: 12px; height: 4px;
+      border-top: 1px solid rgba(232, 196, 120, .55); border-bottom: 1px solid rgba(232, 196, 120, .55);
+    }
+    .book h3 { font-weight: 400; font-size: 23px; line-height: 1.2; margin: 8px 0 8px; }
+    .book p { margin: 0; font-size: 16px; line-height: 1.5; color: rgba(244, 232, 207, .86); }
+    .book .smallcaps { color: rgba(232, 196, 120, .9); font-size: 11px; }
+    .green { --cloth: #2f5a3e; }
+    .red { --cloth: #7b2a24; }
+    .blue { --cloth: #263f66; }
+    .ochre { --cloth: #9a6a22; }
+    .teal { --cloth: var(--teal); }
+    .plum { --cloth: #5a2f4a; }
+
+    /* Theme cards */
+    .themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+    .theme {
+      background: var(--paper-light);
+      border: 1px solid var(--rule);
+      border-radius: 14px;
+      padding: 16px 16px 22px;
+      box-shadow: 0 10px 24px -16px rgba(58,31,19,.5);
+    }
+    .theme h3 { font-weight: 400; font-size: 24px; margin: 16px 6px 6px; }
+    .theme p { margin: 0 6px; font-size: 16px; color: var(--ink-soft); line-height: 1.5; }
+    .swatch {
+      --head: #f2e8d5; --wood: #5a3320; --wood-2: #3a1f13; --accent: #7a3b22; --tape: #efe3c9;
+      position: relative; height: 150px; border-radius: 10px; overflow: hidden;
+      background: var(--head);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.12);
+    }
+    .swatch .head { position: absolute; left: 14px; top: 14px; width: 46%; height: 12px; border-radius: 3px; background: var(--accent); opacity: .85; }
+    .swatch .wood {
+      position: absolute; left: 0; right: 0; bottom: 0; height: 62%;
+      background:
+        repeating-linear-gradient(92deg, rgba(0,0,0,.07) 0 2px, transparent 2px 9px),
+        linear-gradient(180deg, var(--wood), var(--wood-2));
+      box-shadow: inset 0 -14px 0 rgba(0,0,0,.18);
+    }
+    .swatch .tape {
+      position: absolute; right: 16px; bottom: 22px; width: 92px; height: 60px; border-radius: 8px;
+      background: var(--tape);
+      box-shadow: 0 4px 10px rgba(0,0,0,.35), inset 0 0 0 1px rgba(0,0,0,.12);
+    }
+    .swatch .tape::before {
+      content: ""; position: absolute; left: 12px; right: 12px; top: 12px; height: 22px; border-radius: 4px;
+      background: radial-gradient(circle at 30% 50%, #e9dcc0 0 5px, transparent 6px), radial-gradient(circle at 70% 50%, #e9dcc0 0 5px, transparent 6px), #3a2a22;
+    }
+    .swatch .tape::after {
+      content: ""; position: absolute; left: 34px; bottom: 8px; width: 24px; height: 9px; border-radius: 2px; background: var(--accent);
+    }
+    .oak .swatch { --head: #faf5ea; --wood: #c89a5b; --wood-2: #a9773d; --accent: #7f9a6e; --tape: #f6efdf; }
+    .bookcloth .swatch {
+      --head: #1f4f4f; --wood: #5a3320; --wood-2: #3a1f13; --accent: #d9752f; --tape: #efe3c9;
+      background:
+        repeating-linear-gradient(45deg, rgba(255,255,255,.05) 0 1px, transparent 1px 3px),
+        repeating-linear-gradient(-45deg, rgba(0,0,0,.1) 0 1px, transparent 1px 3px),
+        var(--head);
+    }
+    .bookcloth .swatch .wood { height: 46%; }
+
+    /* Two-column notes */
+    .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+    .card {
+      background: var(--paper-light);
+      border: 1px solid var(--rule);
+      border-radius: 14px;
+      padding: 28px 30px;
+      box-shadow: 0 1px 0 rgba(255,255,255,.7) inset;
+    }
+    .card h3 { font-weight: 400; font-size: 26px; margin: 6px 0 14px; }
+    .card ul { margin: 0; padding-left: 1.1em; }
+    .card li { margin: 6px 0; }
+    .card li::marker { color: var(--teal); }
+    code {
+      font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--paper-dark); padding: 2px 6px; border-radius: 4px;
+    }
+
+    footer { border-top: 1px solid var(--rule); padding: 28px 0 40px; font-family: var(--sans); font-size: 14px; color: var(--ink-soft); }
+    footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+    footer a { color: var(--ink-soft); }
+
+    @media (max-width: 900px) {
+      .hero .wrap { grid-template-columns: 1fr; }
+      .board { transform: none; }
+      .shelf { grid-template-columns: 1fr 1fr; }
+      .themes { grid-template-columns: 1fr; max-width: 420px; margin: 0 auto; }
+      .notes { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      body { font-size: 17px; }
+      .shelf { grid-template-columns: 1fr; }
+      nav a.hide-sm { display: none; }
+      section { padding: 56px 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="icon.png" alt="" width="40" height="40"><span>Dogear</span></a>
+      <nav>
+        <a class="hide-sm" href="#features">Features</a>
+        <a class="hide-sm" href="#requirements">Requirements</a>
+        <a href="https://github.com/xchrisbailey/dogear">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <div>
+          <div class="smallcaps">For Grimmory · iPhone &amp; iPad</div>
+          <h1>Your library, <em>dog&#8209;eared</em> right where you left it.</h1>
+          <p class="lede">Dogear is a native app for reading ebooks and listening to audiobooks from your self-hosted <a href="https://grimmory.org">Grimmory</a> server. Download for offline, and pick up on your phone exactly where the web reader left off.</p>
+          <div class="actions">
+            <a class="button" href="https://github.com/xchrisbailey/dogear">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+              View on GitHub
+            </a>
+            <span class="status">In development, not on the App Store yet</span>
+          </div>
+        </div>
+        <figure class="board">
+          <img src="walnut-and-paper.jpg" width="1064" height="972" alt="Two iPhone screens in the Walnut &amp; Paper look: a wooden bookshelf library with clothbound books and cassette cases, and a cream pocket cassette player playing The Secret Garden.">
+          <figcaption>The Walnut &amp; Paper design board</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="smallcaps ornament">On the shelf</div>
+          <h2>Everything in your Grimmory library, in one place</h2>
+          <p>Books on the shelves, audiobooks in cassette cases, and what you were last reading face-out at the front.</p>
+        </div>
+
+        <div class="cabinet">
+          <div class="shelf">
+            <article class="book green">
+              <div class="smallcaps">Read</div>
+              <h3>EPUB, PDF, MOBI, AZW3 &amp; FB2</h3>
+              <p>An open book on a desk, with pages that curl. Choose the font, and two pages side by side on iPad or in landscape. MOBI, AZW3 and FB2 are converted to EPUB on the device.</p>
+            </article>
+            <article class="book red">
+              <div class="smallcaps">Listen</div>
+              <h3>Audiobooks, done properly</h3>
+              <p>Single M4B files or folders of tracks, with chapters, 0.75× to 3× speed, a sleep timer that can stop at the end of a chapter, lock screen controls and AirPlay.</p>
+            </article>
+            <article class="book blue">
+              <div class="smallcaps">Sync</div>
+              <h3>Progress that follows you</h3>
+              <p>Dogear reads and writes the same position as Grimmory's web reader, down to the page. Start on your laptop, keep going on your phone.</p>
+            </article>
+          </div>
+          <div class="shelf">
+            <article class="book ochre">
+              <div class="smallcaps">Offline</div>
+              <h3>Downloads for the commute</h3>
+              <p>Keep any book or audiobook on the device. Progress you make offline waits in an outbox and goes up when you're back, and newer reading elsewhere always wins.</p>
+            </article>
+            <article class="book teal">
+              <div class="smallcaps">Connect</div>
+              <h3>Made for a home server</h3>
+              <p>Sign in with your Grimmory account over HTTPS, or plain HTTP to a server on your Tailscale network, which already encrypts the connection.</p>
+            </article>
+            <article class="book plum">
+              <div class="smallcaps">Log</div>
+              <h3>Hardcover, hands-off</h3>
+              <p>Grimmory already sends progress to Hardcover, so Dogear never asks for a Hardcover token. Read, and your reading log keeps itself.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="themes">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="smallcaps ornament">Appearance</div>
+          <h2>Three looks to choose from</h2>
+          <p>Each theme dresses the library, the reader's chrome and the pocket tape player, which has its own machine in every one. Switch any time in Settings.</p>
+        </div>
+        <div class="themes">
+          <div class="theme walnut">
+            <div class="swatch"><span class="head"></span><span class="wood"></span><span class="tape"></span></div>
+            <h3>Walnut &amp; Paper</h3>
+            <p>The default. A paper header over a walnut cabinet, and a cream player on a leather strap.</p>
+          </div>
+          <div class="theme oak">
+            <div class="swatch"><span class="head"></span><span class="wood"></span><span class="tape"></span></div>
+            <h3>Oak &amp; Daylight</h3>
+            <p>Light paper, honey oak shelves and sage controls, with a player under a carry handle.</p>
+          </div>
+          <div class="theme bookcloth">
+            <div class="swatch"><span class="head"></span><span class="wood"></span><span class="tape"></span></div>
+            <h3>Bookcloth &amp; Tape</h3>
+            <p>Woven deep teal, a cream Continue panel and orange accents, with a player on a lanyard.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="requirements">
+      <div class="wrap">
+        <div class="notes">
+          <div class="card">
+            <div class="smallcaps">What you need</div>
+            <h3>Requirements</h3>
+            <ul>
+              <li>An iPhone or iPad on iOS 26 or later.</li>
+              <li>A <a href="https://github.com/grimmory-tools/grimmory">Grimmory</a> server you can sign in to. Dogear is tested against Grimmory 3.5.</li>
+              <li>The server reachable over HTTPS, or over HTTP on your Tailscale network.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <div class="smallcaps">Where it's at</div>
+            <h3>Status</h3>
+            <ul>
+              <li>Dogear is a personal project by one developer, built in the open.</li>
+              <li>It isn't on the App Store yet. To try it now, build it from source with Xcode; the <a href="https://github.com/xchrisbailey/dogear#building">README</a> has the steps.</li>
+              <li>Bugs and ideas are welcome in <a href="https://github.com/xchrisbailey/dogear/issues">GitHub Issues</a>.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>Dogear is made by Chris at <a href="https://srcery.computer">srcery.computer</a>.</span>
+      <span>Not affiliated with Grimmory or Hardcover.</span>
+    </div>
+  </footer>
+</body>
+</html>
