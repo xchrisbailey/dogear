@@ -1,9 +1,8 @@
 import DogearCore
 import SwiftUI
 
-/// An audiobook on its shelf: a cassette in a clear case, face out, its paper label carrying the
-/// title. The cassette's shell takes the cover's color. Progress and Download marks sit under the
-/// label, never on the title.
+/// An audiobook on its shelf: a cassette's clear case, face out, its paper insert carrying the
+/// title. The same in every theme. Progress and Download marks sit under the title, never on it.
 struct CassetteCase: View {
     /// Width over height.
     static let ratio: CGFloat = 1.55
@@ -21,14 +20,7 @@ struct CassetteCase: View {
     private var canPlay: Bool { book.files.contains { $0.format == .audiobook && $0.isSupported } }
 
     var body: some View {
-        let color = Color(coverColors.color(of: cover) ?? Spine(book: book).fallbackColor)
-        Group {
-            if palette.theme == .walnut {
-                JCard(title: Spine.title(for: book.title), ornament: SpineType.ornament(for: book.id)) { marks }
-            } else {
-                CassetteDrawing(title: Spine.title(for: book.title), band: color, clearShell: palette.theme == .oak, throughBook: throughBook) { marks }
-            }
-        }
+        JCard(title: Spine.title(for: book.title), ornament: SpineType.ornament(for: book.id)) { marks }
         .aspectRatio(Self.ratio, contentMode: .fit)
         .padding(4)
         .background { ClearCase() }
@@ -141,96 +133,5 @@ struct JCard<Marks: View>: View {
         .overlay { Speckle(density: 10, opacity: 0.05) }
         .overlay { Rectangle().strokeBorder(palette.outline.opacity(0.7), lineWidth: 0.5).padding(3) }
         .clipShape(.rect(cornerRadius: 2))
-    }
-}
-
-/// A cassette seen face on: its shell, colored or clear, and a paper label carrying the title
-/// above a colored band with the window onto the reels. `marks` sits along the foot, clear of
-/// the title.
-struct CassetteDrawing<Marks: View>: View {
-    let title: String
-    /// The label's band, from the cover.
-    let band: Color
-    /// Clear plastic rather than the band's color.
-    var clearShell = false
-    /// 0…1, for the tape on the reels; nil leaves them half wound.
-    var throughBook: Double?
-    @ViewBuilder var marks: Marks
-
-    @Environment(\.palette) private var palette
-
-    var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-            let inset = max(size.width * 0.045, 3)
-            VStack(spacing: 0) {
-                VStack(spacing: 0) {
-                    Text(title)
-                        .font(.system(size: 13, weight: .medium, design: .serif).italic())
-                        .foregroundStyle(palette.ink)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.93)
-                        .padding(.horizontal, 4)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(palette.raised)
-                    band
-                        .frame(height: size.height * 0.3)
-                        .overlay { reels(height: size.height * 0.22, width: size.width) }
-                }
-                .clipShape(.rect(cornerRadius: 2))
-                .frame(height: size.height * 0.72)
-                marks
-                    .frame(height: 6)
-                    .padding(.horizontal, size.width * 0.12)
-                    .frame(maxHeight: .infinity)
-            }
-            .padding(.horizontal, inset)
-            .padding(.top, inset)
-            .frame(width: size.width, height: size.height, alignment: .top)
-            .background {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(clearShell ? AnyShapeStyle(Color.white.opacity(0.45)) : AnyShapeStyle(band.mix(with: .black, by: 0.25)))
-                    .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(.black.opacity(0.18), lineWidth: 0.5) }
-            }
-        }
-    }
-
-    /// The window: tape wound on two hubs, their teeth showing.
-    private func reels(height: CGFloat, width: CGFloat) -> some View {
-        let reels = TapeReels(throughBook: throughBook ?? 0.5, hub: height * 0.26, full: height * 0.5)
-        return ZStack {
-            RoundedRectangle(cornerRadius: height * 0.2)
-                .fill(LinearGradient(colors: Theme.window, startPoint: .top, endPoint: .bottom))
-            HStack {
-                reel(tape: reels.supply, height: height)
-                Spacer(minLength: 0)
-                reel(tape: reels.takeUp, height: height)
-            }
-            .padding(.horizontal, height * 0.15)
-        }
-        .frame(width: width * 0.62, height: height)
-        .accessibilityHidden(true)
-    }
-
-    private func reel(tape radius: Double, height: CGFloat) -> some View {
-        ZStack {
-            Circle().fill(Theme.tape).frame(width: radius * 2, height: radius * 2)
-            Circle().fill(Color(hex: 0xF2ECE0)).frame(width: height * 0.5, height: height * 0.5)
-            ForEach(0 ..< 6, id: \.self) { tooth in
-                Capsule()
-                    .fill(Color(hex: 0x6B5B4B))
-                    .frame(width: max(height * 0.06, 1), height: height * 0.14)
-                    .offset(y: -height * 0.17)
-                    .rotationEffect(.degrees(Double(tooth) * 60))
-            }
-        }
-        .frame(width: height, height: height)
-    }
-}
-
-extension CassetteDrawing where Marks == EmptyView {
-    init(title: String, band: Color, clearShell: Bool = false, throughBook: Double? = nil) {
-        self.init(title: title, band: band, clearShell: clearShell, throughBook: throughBook) { EmptyView() }
     }
 }

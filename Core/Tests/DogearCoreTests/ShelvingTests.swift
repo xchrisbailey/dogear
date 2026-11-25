@@ -135,6 +135,26 @@ struct ShelvingTests {
         #expect(Shelves.fill(thicknesses: [], shelfWidth: 100, spacing: 2).isEmpty)
     }
 
+    @Test func balancedShelvesShareSpinesOutEvenly() {
+        // Greedy filling leaves one Book on the last shelf: 4, 4, 1. Two full shelves squeeze the
+        // spines less than three sparse ones would stretch them.
+        let nine = Array(repeating: 80.0, count: 9)
+        #expect(Shelves.fill(thicknesses: nine, shelfWidth: 361, spacing: 3) == [0 ..< 4, 4 ..< 8, 8 ..< 9])
+        #expect(Shelves.balanced(thicknesses: nine, shelfWidth: 361, spacing: 3) == [0 ..< 5, 5 ..< 9])
+        // Eight fill two shelves as they are.
+        #expect(Shelves.balanced(thicknesses: Array(nine.dropLast()), shelfWidth: 361, spacing: 3) == [0 ..< 4, 4 ..< 8])
+
+        // Every spine lands on exactly one shelf, in order, whatever the widths.
+        let mixed: [Double] = [60, 86, 72, 64, 86, 80, 61, 75, 86, 70, 66]
+        let shelves = Shelves.balanced(thicknesses: mixed, shelfWidth: 361, spacing: 3)
+        #expect(shelves.count == 2)
+        #expect(shelves.flatMap { Array($0) } == Array(mixed.indices))
+        #expect(shelves.allSatisfy { !$0.isEmpty })
+
+        #expect(Shelves.balanced(thicknesses: [70, 70], shelfWidth: 361, spacing: 3) == [0 ..< 2])
+        #expect(Shelves.balanced(thicknesses: [], shelfWidth: 361, spacing: 3).isEmpty)
+    }
+
     @Test func reelsMoveTapeFromLeftToRightAsTheBookPlays() {
         let unplayed = TapeReels(throughBook: 0, hub: 10, full: 30)
         let halfway = TapeReels(throughBook: 0.5, hub: 10, full: 30)

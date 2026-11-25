@@ -335,18 +335,18 @@ struct LibraryView: View {
         return spine
     }
 
-    /// Spines filled onto shelves of `width`, each full shelf's spines widened a little to
-    /// span it so the shelves end evenly. The last shelf keeps its spines as they are.
+    /// Spines shared out over shelves of `width`, then each shelf's spines stretched or squeezed
+    /// in proportion to span it, so every shelf is full and thick Books stay thicker than thin
+    /// ones. A shelf with too few Books to span it without looking bloated keeps a gap.
     private static func fill(_ spines: [Spine], width: CGFloat) -> [FilledShelf] {
         guard width > 0 else { return [] }
-        let ranges = Shelves.fill(thicknesses: spines.map(\.thickness), shelfWidth: width, spacing: spineGap)
-        return ranges.enumerated().map { number, range in
+        let ranges = Shelves.balanced(thicknesses: spines.map(\.thickness), shelfWidth: width, spacing: spineGap)
+        return ranges.map { range in
             var shelf = Array(spines[range])
-            if number < ranges.count - 1 {
-                let used = shelf.map(\.thickness).reduce(0, +) + spineGap * Double(shelf.count - 1)
-                let widen = min(width / used, 1.2)
-                for index in shelf.indices { shelf[index].thickness = (shelf[index].thickness * widen).rounded(.down) }
-            }
+            let natural = shelf.map(\.thickness).reduce(0, +)
+            let room = width - spineGap * Double(shelf.count - 1)
+            let scale = min(max(room / max(natural, 1), Shelves.stretch.lowerBound), Shelves.stretch.upperBound)
+            for index in shelf.indices { shelf[index].thickness = (shelf[index].thickness * scale).rounded(.down) }
             return FilledShelf(range: range, spines: shelf)
         }
     }

@@ -181,6 +181,48 @@ public enum Shelves {
         if start < thicknesses.count { shelves.append(start ..< thicknesses.count) }
         return shelves
     }
+
+    /// The most a shelf's spines are squeezed, and stretched, to span it.
+    public static let stretch: ClosedRange<Double> = 0.82 ... 1.45
+
+    /// Shelves with the spines shared out so every one holds about the same width of them, and
+    /// each can have its spines stretched or squeezed a little to span it. No shelf is left
+    /// with one stray Book: when the last shelf would be mostly empty, its Books are taken up by
+    /// the others if that squeezes them less than spreading out would stretch them.
+    public static func balanced(thicknesses: [Double], shelfWidth: Double, spacing: Double) -> [Range<Int>] {
+        let greedy = fill(thicknesses: thicknesses, shelfWidth: shelfWidth, spacing: spacing).count
+        guard greedy > 0 else { return [] }
+        let total = thicknesses.reduce(0, +)
+        /// How much spines change width, on average, to span `shelves` shelves.
+        func scale(over shelves: Int) -> Double {
+            (shelfWidth * Double(shelves) - spacing * Double(thicknesses.count - shelves)) / max(total, 1)
+        }
+        var count = greedy
+        if greedy > 1, scale(over: greedy - 1) >= stretch.lowerBound,
+           abs(log(scale(over: greedy - 1))) < abs(log(scale(over: greedy))) {
+            count = greedy - 1
+        }
+        guard count > 1 else { return [0 ..< thicknesses.count] }
+        var shelves: [Range<Int>] = []
+        var start = 0
+        var placed = 0.0
+        for shelf in 1 ..< count {
+            let boundary = total * Double(shelf) / Double(count)
+            // Leave at least one spine for each shelf still to come.
+            let last = thicknesses.count - (count - shelf)
+            var end = start + 1
+            placed += thicknesses[start]
+            // A spine goes on this shelf when more than half of it lies before the boundary.
+            while end < last, placed + thicknesses[end] / 2 <= boundary {
+                placed += thicknesses[end]
+                end += 1
+            }
+            shelves.append(start ..< end)
+            start = end
+        }
+        shelves.append(start ..< thicknesses.count)
+        return shelves
+    }
 }
 
 /// A cassette's two reels showing how far through an audiobook the listener is: tape moves from
