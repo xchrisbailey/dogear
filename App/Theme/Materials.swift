@@ -77,7 +77,7 @@ nonisolated struct Palette: Equatable, Sendable {
             inkSecondary = Color(hex: 0x655045)
             accent = Color(hex: 0x673922)
             onAccent = Color(hex: 0xFFF4E3)
-            shelfBacking = Color(hex: 0x352217)
+            shelfBacking = Color(hex: 0x54321F)
             ledgeTop = Color(hex: 0x9F673E)
             ledgeFace = Color(hex: 0x633A24)
             outline = Color(hex: 0xBDA891)
@@ -297,7 +297,7 @@ struct ShelfBacking: View {
         palette.shelfBacking
             .overlay {
                 if contrast != .increased {
-                    if isCloth { Linen(opacity: 0.05) } else { WoodGrain(opacity: 0.06, vertical: true).blur(radius: 0.5) }
+                    if isCloth { Linen(opacity: 0.05) } else { WoodGrain(opacity: palette.hasDarkShelves ? 0.06 : 0.025, vertical: true).blur(radius: 0.5) }
                 }
             }
             // Lamplight on the middle of the case.
@@ -308,18 +308,18 @@ struct ShelfBacking: View {
             .overlay {
                 LinearGradient(
                     stops: [
-                        .init(color: .black.opacity(0.32 * shade), location: 0),
-                        .init(color: .clear, location: 0.18),
-                        .init(color: .clear, location: 0.82),
-                        .init(color: .black.opacity(0.32 * shade), location: 1),
+                        .init(color: .black.opacity(0.26 * shade), location: 0),
+                        .init(color: .clear, location: 0.16),
+                        .init(color: .clear, location: 0.84),
+                        .init(color: .black.opacity(0.26 * shade), location: 1),
                     ],
                     startPoint: .leading, endPoint: .trailing
                 )
             }
             // Shade cast by the shelf above.
             .overlay(alignment: .top) {
-                LinearGradient(colors: [.black.opacity(0.5 * shade), .black.opacity(0.12 * shade), .clear], startPoint: .top, endPoint: .bottom)
-                    .frame(height: 26)
+                LinearGradient(colors: [.black.opacity(0.42 * shade), .black.opacity(0.1 * shade), .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 30)
             }
             .overlay(alignment: .leading) { if !isCloth { Upright(leading: true) } }
             .overlay(alignment: .trailing) { if !isCloth { Upright(leading: false) } }
@@ -353,10 +353,10 @@ struct ShelfLedge: View {
     var body: some View {
         VStack(spacing: 0) {
             LinearGradient(colors: [palette.ledgeTop.mix(with: palette.ledgeFace, by: 0.25), palette.ledgeTop], startPoint: .top, endPoint: .bottom)
-                .frame(height: 4)
+                .frame(height: 5)
             Color.white.opacity(0.28).frame(height: 1)
             LinearGradient(colors: [palette.ledgeFace.mix(with: palette.ledgeTop, by: 0.3), palette.ledgeFace, palette.ledgeFace.mix(with: .black, by: 0.2)], startPoint: .top, endPoint: .bottom)
-                .frame(height: 7)
+                .frame(height: 12)
         }
         .overlay {
             if contrast != .increased { WoodGrain(opacity: 0.12) }
@@ -364,28 +364,6 @@ struct ShelfLedge: View {
         .shadow(color: .black.opacity(palette.hasDarkShelves ? 0.5 : 0.22), radius: 4, y: 4)
         .zIndex(1)
         .accessibilityHidden(true)
-    }
-}
-
-/// A section heading on the bookcase, on a paper label so it reads on any wood.
-struct ShelfHeading: View {
-    let text: String
-
-    @Environment(\.palette) private var palette
-
-    init(_ text: String) {
-        self.text = text
-    }
-
-    var body: some View {
-        Text(text)
-            .serifTitle(20, relativeTo: .title3)
-            .foregroundStyle(palette.ink)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-            .background(palette.raised, in: .rect(cornerRadius: 6))
-            .shadow(color: .black.opacity(0.2), radius: 1.5, y: 1)
-            .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -537,17 +515,27 @@ struct CoverImage: View {
                     .scaledToFit()
                     .clipShape(.rect(cornerRadius: 4))
             } else {
+                // No cover: a plain cloth binding in the theme's accent, its title stamped on it.
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(palette.raised)
-                    .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(palette.outline, lineWidth: 1) }
+                    .fill(LinearGradient(
+                        colors: [palette.accent.mix(with: .white, by: 0.08), palette.accent.mix(with: .black, by: 0.12)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    ))
+                    .overlay(alignment: .leading) {
+                        // The joint beside the spine.
+                        LinearGradient(colors: [.black.opacity(0.25), .white.opacity(0.12), .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: 9)
+                    }
+                    .overlay { RoundedRectangle(cornerRadius: 2).strokeBorder(palette.onAccent.opacity(0.45), lineWidth: 0.75).padding(6) }
                     .overlay {
                         Text(title)
-                            .font(Theme.stamped(13))
-                            .foregroundStyle(palette.ink)
+                            .font(Theme.stamped(14))
+                            .foregroundStyle(palette.onAccent)
                             .multilineTextAlignment(.center)
                             .minimumScaleFactor(0.6)
-                            .padding(8)
+                            .padding(12)
                     }
+                    .clipShape(.rect(cornerRadius: 4))
                     .aspectRatio(2 / 3, contentMode: .fit)
             }
         }

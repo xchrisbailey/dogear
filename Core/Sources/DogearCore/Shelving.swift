@@ -8,10 +8,10 @@ import Foundation
 /// devices.
 public struct Spine: Sendable, Equatable {
     /// Wide enough for a title read across the spine, a few words to a line.
-    public static let thicknesses: ClosedRange<Double> = 56 ... 84
-    public static let heights: ClosedRange<Double> = 152 ... 168
-    /// Never below 13 pt, so a title reads at arm's length.
-    public static let fontSizes: ClosedRange<Double> = 13 ... 15
+    public static let thicknesses: ClosedRange<Double> = 60 ... 86
+    public static let heights: ClosedRange<Double> = 172 ... 188
+    /// Never below 15 pt, so a title reads at arm's length.
+    public static let fontSizes: ClosedRange<Double> = 15 ... 17
     /// Ebook file sizes, in kilobytes, that span thinnest to thickest. A novel as an EPUB is a
     /// few hundred kilobytes and an illustrated book or a PDF tens of megabytes, so thickness
     /// follows the size's order of magnitude.
@@ -99,14 +99,14 @@ public struct SpineColor: Sendable, Hashable, Codable {
 
     /// Cloth colors for Books without a cover.
     public static let palette: [SpineColor] = [
-        SpineColor(red: 0.427, green: 0.122, blue: 0.133), // oxblood
-        SpineColor(red: 0.122, green: 0.200, blue: 0.329), // navy
-        SpineColor(red: 0.184, green: 0.353, blue: 0.227), // forest
-        SpineColor(red: 0.294, green: 0.165, blue: 0.310), // plum
-        SpineColor(red: 0.239, green: 0.310, blue: 0.388), // slate
-        SpineColor(red: 0.353, green: 0.086, blue: 0.188), // claret
-        SpineColor(red: 0.137, green: 0.149, blue: 0.169), // charcoal
-        SpineColor(red: 0.431, green: 0.243, blue: 0.118), // tan
+        SpineColor(red: 0.520, green: 0.150, blue: 0.150), // oxblood
+        SpineColor(red: 0.160, green: 0.250, blue: 0.440), // navy
+        SpineColor(red: 0.200, green: 0.380, blue: 0.240), // forest
+        SpineColor(red: 0.360, green: 0.190, blue: 0.380), // plum
+        SpineColor(red: 0.260, green: 0.350, blue: 0.450), // slate
+        SpineColor(red: 0.450, green: 0.100, blue: 0.220), // claret
+        SpineColor(red: 0.470, green: 0.330, blue: 0.090), // ochre
+        SpineColor(red: 0.560, green: 0.260, blue: 0.170), // terracotta
     ]
 
     /// WCAG relative luminance.

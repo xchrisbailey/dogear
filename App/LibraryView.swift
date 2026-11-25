@@ -214,14 +214,14 @@ struct LibraryView: View {
         }
     }
 
-    /// A heading on a paper label on its own stretch of the bookcase.
+    /// Where the Books end and the Audiobooks begin. The objects say which is which, so the
+    /// heading is only there for VoiceOver's rotor.
     private func headingShelf(_ title: String) -> some View {
-        ShelfHeading(title)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Self.inset)
-            .padding(.top, 14)
-            .padding(.bottom, 2)
-            .background { ShelfBacking() }
+        Color.clear
+            .frame(maxWidth: .infinity, minHeight: 1, maxHeight: 1)
+            .accessibilityElement()
+            .accessibilityLabel(title)
+            .accessibilityAddTraits(.isHeader)
     }
 
     @ViewBuilder private var emptyState: some View {
@@ -262,8 +262,6 @@ struct LibraryView: View {
     /// swipe away, or stacked at accessibility text sizes.
     private func continueShelf(_ entries: [ContinueEntry]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            ShelfHeading(ContinueRows.heading(showing: kind))
-                .padding(.horizontal, Self.inset)
             if usesRows {
                 VStack(spacing: 10) {
                     ForEach(entries) { entry in continueButton(entry) }
@@ -284,7 +282,7 @@ struct LibraryView: View {
                 .scrollIndicators(.hidden)
             }
         }
-        .padding(.top, 14)
+        .padding(.top, 18)
         .shelfRow(insetContent: false)
     }
 
@@ -292,7 +290,7 @@ struct LibraryView: View {
         Button {
             Task { await open(entry.file, of: entry.book) }
         } label: {
-            ContinueCard(entry: entry, library: library)
+            ContinueCard(entry: entry, heading: ContinueRows.heading(showing: kind), library: library)
         }
         .buttonStyle(LiftsWhenPressed())
     }
@@ -543,11 +541,13 @@ private struct SearchField: View {
 /// way back in. The whole card is one button.
 private struct ContinueCard: View {
     let entry: ContinueEntry
+    /// "Continue", "Continue Reading" or "Continue Listening".
+    let heading: String
     let library: Library
 
     @Environment(CoverColors.self) private var coverColors
     @Environment(\.palette) private var palette
-    @ScaledMetric(relativeTo: .body) private var thumbnailWidth: CGFloat = 88
+    @ScaledMetric(relativeTo: .body) private var thumbnailWidth: CGFloat = 104
 
     private var isAudiobook: Bool { entry.file.format == .audiobook }
 
@@ -562,46 +562,55 @@ private struct ContinueCard: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        // The Book stands on the ledge, and a paper card leans beside it.
+        HStack(alignment: .bottom, spacing: 12) {
             CoverImage(cover: cover, title: entry.book.title, library: library)
-                .frame(width: min(thumbnailWidth, 88), height: 120, alignment: .bottom)
-                .shadow(color: .black.opacity(0.3), radius: 3, x: 2, y: 3)
+                .frame(width: min(thumbnailWidth, 104), height: 150, alignment: .bottom)
+                .background(alignment: .bottom) {
+                    Ellipse().fill(.black.opacity(0.5)).frame(height: 7).blur(radius: 3).offset(y: 3)
+                }
+                .shadow(color: .black.opacity(0.35), radius: 4, x: 3, y: 0)
             VStack(alignment: .leading, spacing: 4) {
+                Text(heading.uppercased())
+                    .font(.caption.weight(.semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(palette.accent)
                 Text(entry.book.title)
                     .serifTitle(20, relativeTo: .title3)
                     .foregroundStyle(palette.ink)
-                    .lineLimit(3)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
                 if let author = entry.book.authors.first {
                     Text(author)
-                        .font(.subheadline)
+                        .font(.system(.subheadline, design: .serif))
                         .foregroundStyle(palette.inkSecondary)
-                        .lineLimit(2)
+                        .lineLimit(1)
                 }
-                Text(isAudiobook ? "Audiobook" : entry.file.format.name)
-                    .font(.footnote)
-                    .foregroundStyle(palette.inkSecondary)
-                if let throughBook, let percent {
-                    HStack(spacing: 8) {
-                        ProgressBar(value: throughBook, track: palette.inkSecondary.opacity(0.35))
-                        Text(percent)
-                            .font(.footnote)
-                            .monospacedDigit()
-                            .foregroundStyle(palette.inkSecondary)
-                    }
-                    .padding(.top, 4)
+                if let throughBook {
+                    ProgressBar(value: throughBook, track: palette.inkSecondary.opacity(0.25))
+                        .padding(.top, 6)
                 }
+                HStack(spacing: 6) {
+                    Text([percent, isAudiobook ? "Audiobook" : entry.file.format.name].compactMap(\.self).joined(separator: "  ·  "))
+                        .font(.footnote)
+                        .monospacedDigit()
+                        .foregroundStyle(palette.inkSecondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Image(systemName: isAudiobook ? "play.circle.fill" : "chevron.right")
+                        .font(isAudiobook ? .title2 : .body.weight(.semibold))
+                        .foregroundStyle(isAudiobook ? palette.accent : palette.ink)
+                        .accessibilityHidden(true)
+                }
+                .padding(.top, 2)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Image(systemName: isAudiobook ? "play.circle.fill" : "chevron.right")
-                .font(isAudiobook ? .largeTitle : .body.weight(.semibold))
-                .foregroundStyle(isAudiobook ? palette.accent : palette.inkSecondary)
-                .frame(minWidth: 44, minHeight: 44)
-                .accessibilityHidden(true)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .paperCard(radius: 8)
+            .padding(.bottom, 16)
         }
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .paperCard(radius: 14)
-        .padding(.bottom, 10)
         .task(id: cover) { await coverColors.load(cover, from: library) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)

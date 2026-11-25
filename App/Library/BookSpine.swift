@@ -74,31 +74,31 @@ struct BookSpine: View {
         let titleSize = SpineType.size(for: spine.title, preferred: spine.fontSize, width: spine.thickness - SpineType.sidePadding * 2)
         VStack(spacing: 0) {
             if !wrapped {
-                Bands(color: lettering).padding(.top, 7)
+                Bands(color: lettering).padding(.top, 9)
             }
             Text(spine.title)
                 .font(SpineType.swiftUIFont(titleSize))
                 .foregroundStyle(lettering)
                 .multilineTextAlignment(.center)
-                .lineLimit(3)
+                .lineLimit(4)
                 .lineSpacing(-1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, SpineType.sidePadding)
-                .padding(.top, wrapped ? 14 : 10)
+                .padding(.top, wrapped ? 16 : 18)
                 .shadow(color: .black.opacity(bound.lettering == .foil ? 0.35 : 0), radius: 0, y: 1)
             Spacer(minLength: 4)
             if !wrapped, contrast != .increased {
                 // Line art stamped in the same foil or ink as the title.
                 Image(systemName: SpineType.ornament(for: book.id))
-                    .font(.system(size: min(spine.thickness * 0.36, 26), weight: .ultraLight))
-                    .foregroundStyle(lettering.opacity(0.8))
+                    .font(.system(size: min(spine.thickness * 0.46, 36), weight: .thin))
+                    .foregroundStyle(lettering.opacity(0.85))
             }
             Spacer(minLength: 4)
             if let authorLine, !wrapped {
                 Text(authorLine)
-                    .font(.system(size: 10, weight: .medium, design: .serif))
-                    .tracking(0.9)
+                    .font(.system(size: 11, weight: .medium, design: .serif))
+                    .tracking(1)
                     .foregroundStyle(lettering.opacity(0.92))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -117,28 +117,28 @@ struct BookSpine: View {
             if contrast != .increased {
                 ZStack {
                     // Cloth: a fine mottle, light and dark.
-                    Speckle(density: 6, opacity: 0.09)
+                    Speckle(density: 6, opacity: 0.05)
                         .blendMode(.overlay)
                     // Light falling across a rounded back from the upper left.
                     LinearGradient(
                         stops: [
-                            .init(color: .black.opacity(0.38), location: 0),
-                            .init(color: .black.opacity(0.05), location: 0.12),
-                            .init(color: .white.opacity(0.13), location: 0.32),
-                            .init(color: .clear, location: 0.6),
-                            .init(color: .black.opacity(0.2), location: 0.88),
-                            .init(color: .black.opacity(0.42), location: 1),
+                            .init(color: .black.opacity(0.24), location: 0),
+                            .init(color: .white.opacity(0.04), location: 0.1),
+                            .init(color: .white.opacity(0.14), location: 0.3),
+                            .init(color: .clear, location: 0.62),
+                            .init(color: .black.opacity(0.1), location: 0.9),
+                            .init(color: .black.opacity(0.28), location: 1),
                         ],
                         startPoint: .leading, endPoint: .trailing
                     )
-                    LinearGradient(colors: [.white.opacity(0.08), .clear, .black.opacity(0.18)], startPoint: .top, endPoint: .bottom)
+                    LinearGradient(colors: [.white.opacity(0.1), .clear, .black.opacity(0.1)], startPoint: .top, endPoint: .bottom)
                 }
                 .allowsHitTesting(false)
             }
         }
         // The headcap catching the light.
         .overlay(alignment: .top) { Color.white.opacity(0.18).frame(height: 1) }
-        .clipShape(.rect(topLeadingRadius: 4, bottomLeadingRadius: 1.5, bottomTrailingRadius: 1.5, topTrailingRadius: 4))
+        .clipShape(.rect(topLeadingRadius: 6, bottomLeadingRadius: 2, bottomTrailingRadius: 2, topTrailingRadius: 6))
         .overlay(alignment: .top) {
             if throughBook != nil {
                 Ribbon()
@@ -157,7 +157,7 @@ struct BookSpine: View {
                 .blur(radius: 2.5)
                 .offset(y: 2)
         }
-        .shadow(color: .black.opacity(0.45), radius: 4, x: 3, y: 0)
+        .shadow(color: .black.opacity(0.32), radius: 3, x: 2, y: 0)
         .task(id: cover) { await coverColors.load(cover, from: library) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)
