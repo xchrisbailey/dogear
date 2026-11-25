@@ -114,7 +114,8 @@ struct NowPlayingBar: View {
         HStack(spacing: 12) {
             Button(action: open) {
                 HStack(spacing: 12) {
-                    MiniCassette()
+                    // Too small to read, so the label is left blank.
+                    CassetteArt()
                         .frame(width: 48, height: 32)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 1) {
@@ -175,37 +176,6 @@ struct NowPlayingBar: View {
 
     private var isOpening: Bool {
         if case .opening = player.state { true } else { false }
-    }
-}
-
-/// A cassette small enough for the now-playing strip: the theme's player trim, a paper label and
-/// a dark window.
-private struct MiniCassette: View {
-    @Environment(\.palette) private var palette
-
-    var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-            ZStack(alignment: .top) {
-                RoundedRectangle(cornerRadius: 4).fill(palette.shellTrim)
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(palette.raised)
-                    .frame(width: size.width * 0.82, height: size.height * 0.36)
-                    .padding(.top, size.height * 0.1)
-                Capsule()
-                    .fill(LinearGradient(colors: Theme.window, startPoint: .top, endPoint: .bottom))
-                    .overlay {
-                        HStack {
-                            Circle().fill(Color(hex: 0xEDE6D8))
-                            Spacer()
-                            Circle().fill(Color(hex: 0xEDE6D8))
-                        }
-                        .padding(2)
-                    }
-                    .frame(width: size.width * 0.6, height: size.height * 0.26)
-                    .padding(.top, size.height * 0.55)
-            }
-        }
     }
 }
 

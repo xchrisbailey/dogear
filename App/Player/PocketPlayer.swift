@@ -105,17 +105,12 @@ struct PocketPlayer: View {
 
     private func pocket(width: CGFloat) -> some View {
         PocketDrawing(
-            title: model.title, author: model.author,
+            title: model.title,
             throughBook: model.knownSeconds.map { elapsed / $0 } ?? 0,
-            isPlaying: model.isPlaying, speed: Double(model.speed),
-            isReady: { if case .ready = model.state { true } else { false } }(),
-            skipBack: { model.skip(by: .zero - model.skipBack) },
-            togglePlayback: { model.togglePlayback() },
-            skipForward: { model.skip(by: model.skipForward) }
+            isPlaying: model.isPlaying, speed: Double(model.speed)
         )
         .frame(width: max(width, 170), height: max(width, 170) / PocketDrawing.ratio)
-        // The title and author are read above, and the transport row below is the one
-        // VoiceOver uses; the keys on the player work for a finger as a convenience.
+        // The title and author are read above, and the transport row below is the working one.
         .accessibilityHidden(true)
     }
 

@@ -90,9 +90,8 @@ struct BookSpine: View {
             Spacer(minLength: 4)
             if !wrapped, contrast != .increased {
                 // Line art stamped in the same foil or ink as the title.
-                Image(systemName: SpineType.ornament(for: book.id))
-                    .font(.system(size: min(spine.thickness * 0.46, 36), weight: .thin))
-                    .foregroundStyle(lettering.opacity(0.85))
+                FoilOrnament(seed: book.id, tint: bound.lettering == .foil ? nil : lettering.opacity(0.8))
+                    .frame(width: min(max(spine.thickness * 0.5, 24), 40), height: 36)
             }
             Spacer(minLength: 4)
             if let authorLine, !wrapped {
@@ -117,8 +116,9 @@ struct BookSpine: View {
             if contrast != .increased {
                 ZStack {
                     // Cloth: a fine mottle, light and dark.
-                    Speckle(density: 6, opacity: 0.05)
-                        .blendMode(.overlay)
+                    Texture(name: "SpineLinen")
+                        .opacity(0.3)
+                        .blendMode(.softLight)
                     // Light falling across a rounded back from the upper left.
                     LinearGradient(
                         stops: [
@@ -282,16 +282,6 @@ enum SpineType {
         }
         return size
     }
-
-    /// Line art for a spine, the same for a Book every time.
-    static func ornament(for id: Int) -> String {
-        ornaments[abs(id) % ornaments.count]
-    }
-
-    private static let ornaments = [
-        "mountain.2", "water.waves", "sun.horizon", "building.columns", "leaf", "bird",
-        "moon.stars", "tree", "sailboat", "crown", "fish", "camera.macro",
-    ]
 }
 
 /// A ribbon bookmark with a swallowtail end.

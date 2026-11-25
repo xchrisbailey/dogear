@@ -32,7 +32,7 @@ struct LibraryView: View {
     static let inset: CGFloat = 16
     private static let spineGap: CGFloat = 3
     private static let caseGap: CGFloat = 8
-    private static let caseMinWidth: CGFloat = 96
+    private static let caseMinWidth: CGFloat = 150
 
     private var query: Query { Query(scope: scope, search: search, kind: kind) }
 
@@ -320,8 +320,7 @@ struct LibraryView: View {
     private func cassette(_ book: Book, _ shelving: ShelvingLookup) -> some View {
         CassetteCase(
             book: book, throughBook: shelving.throughBook(book),
-            download: shelving.download(of: book.files.filter { $0.format == .audiobook }),
-            library: library
+            download: shelving.download(of: book.files.filter { $0.format == .audiobook })
         )
         .shelved(open: playAction(book)) { pull(book) }
     }

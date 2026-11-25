@@ -1,38 +1,38 @@
 import DogearCore
 import SwiftUI
 
-/// An audiobook on its shelf: a cassette's clear case, face out, its paper insert carrying the
-/// title. The same in every theme. Progress and Download marks sit under the title, never on it.
+/// An audiobook on its shelf: a cassette in its clear case, face out, the title on its paper
+/// label. The same in every theme. Progress and Download marks sit under the title, never on it.
 struct CassetteCase: View {
     /// Width over height.
-    static let ratio: CGFloat = 1.55
+    static let ratio = CassetteArt.ratio
 
     let book: Book
     /// nil when the Book was never played.
     let throughBook: Double?
     let download: ShelfDownload
-    let library: Library
 
-    @Environment(CoverColors.self) private var coverColors
     @Environment(\.palette) private var palette
 
-    private var cover: Cover? { book.audiobookCover ?? book.cover }
     private var canPlay: Bool { book.files.contains { $0.format == .audiobook && $0.isSupported } }
 
     var body: some View {
-        JCard(title: Spine.title(for: book.title), ornament: SpineType.ornament(for: book.id)) { marks }
-        .aspectRatio(Self.ratio, contentMode: .fit)
-        .padding(4)
-        .background { ClearCase() }
-        .opacity(canPlay ? 1 : 0.7)
-        // Standing on the ledge: a contact shadow at its foot.
-        .background(alignment: .bottom) {
-            Ellipse().fill(.black.opacity(0.45)).frame(height: 6).blur(radius: 2.5).offset(y: 2)
-        }
-        .shadow(color: .black.opacity(0.3), radius: 3, x: 2, y: 1)
-        .task(id: cover) { await coverColors.load(cover, from: library) }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(spoken)
+        CassetteArt(title: Spine.title(for: book.title))
+            .overlay {
+                GeometryReader { proxy in
+                    marks
+                        .frame(width: proxy.size.width * 0.8, height: 6)
+                        .position(x: proxy.size.width / 2, y: proxy.size.height * 0.368)
+                }
+            }
+            .opacity(canPlay ? 1 : 0.7)
+            // Standing on the ledge: a contact shadow at its foot.
+            .background(alignment: .bottom) {
+                Ellipse().fill(.black.opacity(0.45)).frame(height: 6).blur(radius: 2.5).offset(y: 2)
+            }
+            .shadow(color: .black.opacity(0.3), radius: 3, x: 2, y: 1)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(spoken)
     }
 
     /// How far through, and the Download, along the foot of the case.
@@ -83,55 +83,36 @@ struct CassetteCase: View {
     }
 }
 
-/// A clear plastic cassette case: faint, with a bright rim and glare across its face.
-struct ClearCase: View {
+/// The cassette artwork, with a title written on its label when one is given. Without one the
+/// label is left blank, for sizes too small to read.
+struct CassetteArt: View {
+    /// Width over height of the artwork.
+    static let ratio: CGFloat = 1.5
+
+    var title: String?
+
+    /// Ink on the label, the same in every theme.
+    private static let ink = Color(red: 0.18, green: 0.11, blue: 0.07)
+
     var body: some View {
-        RoundedRectangle(cornerRadius: 5)
-            .fill(LinearGradient(colors: [.white.opacity(0.32), .white.opacity(0.12), .white.opacity(0.2)], startPoint: .top, endPoint: .bottom))
-            .overlay { RoundedRectangle(cornerRadius: 5).strokeBorder(.white.opacity(0.65), lineWidth: 1) }
-            .overlay { RoundedRectangle(cornerRadius: 3).strokeBorder(.black.opacity(0.15), lineWidth: 0.5).padding(2.5) }
+        Image("CassetteCase")
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(Self.ratio, contentMode: .fit)
             .overlay {
-                // Glare across the lid.
-                LinearGradient(
-                    stops: [.init(color: .clear, location: 0.25), .init(color: .white.opacity(0.22), location: 0.32), .init(color: .clear, location: 0.42)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                )
-                .clipShape(.rect(cornerRadius: 5))
+                if let title {
+                    GeometryReader { proxy in
+                        Text(title)
+                            .font(.system(size: max(proxy.size.height * 0.118, 8), weight: .medium, design: .serif).italic())
+                            .foregroundStyle(Self.ink)
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.7)
+                            .frame(width: proxy.size.width * 0.82, height: proxy.size.height * 0.2)
+                            .position(x: proxy.size.width / 2, y: proxy.size.height * 0.242)
+                    }
+                }
             }
-            .allowsHitTesting(false)
             .accessibilityHidden(true)
-    }
-}
-
-/// A case's paper insert facing out: the title in italic, and line art printed under it.
-struct JCard<Marks: View>: View {
-    let title: String
-    let ornament: String
-    @ViewBuilder var marks: Marks
-
-    @Environment(\.palette) private var palette
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Spacer(minLength: 2)
-            Text(title)
-                .font(.system(size: 14, weight: .medium, design: .serif).italic())
-                .foregroundStyle(palette.ink)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.93)
-            Image(systemName: ornament)
-                .font(.system(size: 15, weight: .ultraLight))
-                .foregroundStyle(palette.inkSecondary)
-            Spacer(minLength: 2)
-            marks.frame(height: 6)
-        }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 5)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(palette.raised)
-        .overlay { Speckle(density: 10, opacity: 0.05) }
-        .overlay { Rectangle().strokeBorder(palette.outline.opacity(0.7), lineWidth: 0.5).padding(3) }
-        .clipShape(.rect(cornerRadius: 2))
     }
 }

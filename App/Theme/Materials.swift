@@ -11,8 +11,6 @@ enum Theme {
     /// A Download running.
     static let glow = Color(hex: 0x8EF0C1)
     static let tape = Color(hex: 0x4A2E1C)
-    /// The dark window of a cassette or player.
-    static let window = [Color(hex: 0x2A211B), Color(hex: 0x120D0A)]
     /// The desk an open Book lies on, lit from above its middle.
     static let desk = [Color(hex: 0x3A2314), Color(hex: 0x170D07)]
     static let coverBoard = Color(hex: 0x5A1418)
@@ -196,10 +194,22 @@ struct CanvasBackground: View {
             }
             .overlay {
                 if contrast != .increased {
-                    if palette.theme == .bookcloth { Linen(opacity: 0.05) } else { Speckle(opacity: 0.035) }
+                    if palette.theme == .bookcloth { Texture(name: "GreenBookcloth").opacity(0.2) } else { Speckle(opacity: 0.035) }
                 }
             }
             .ignoresSafeArea()
+            .accessibilityHidden(true)
+    }
+}
+
+/// One of the artwork's seamless textures, repeated to fill.
+struct Texture: View {
+    let name: String
+
+    var body: some View {
+        Image(name)
+            .resizable(resizingMode: .tile)
+            .allowsHitTesting(false)
             .accessibilityHidden(true)
     }
 }
@@ -225,28 +235,6 @@ struct Speckle: View {
             }
         }
         .drawingGroup()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-}
-
-/// The weave of book cloth: fine light weft over darker warp, too small to read as stripes.
-struct Linen: View {
-    let opacity: Double
-
-    var body: some View {
-        Canvas { context, size in
-            var y: CGFloat = 0
-            while y < size.height {
-                context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 1)), with: .color(.white.opacity(opacity)))
-                y += 3
-            }
-            var x: CGFloat = 0
-            while x < size.width {
-                context.fill(Path(CGRect(x: x, y: 0, width: 1, height: size.height)), with: .color(.black.opacity(opacity * 2)))
-                x += 3
-            }
-        }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -297,7 +285,12 @@ struct ShelfBacking: View {
         palette.shelfBacking
             .overlay {
                 if contrast != .increased {
-                    if isCloth { Linen(opacity: 0.05) } else { WoodGrain(opacity: palette.hasDarkShelves ? 0.06 : 0.025, vertical: true).blur(radius: 0.5) }
+                    if isCloth {
+                        Texture(name: "GreenBookcloth").opacity(0.3)
+                    } else {
+                        // The wood itself, under the theme's own tint.
+                        Texture(name: palette.theme == .oak ? "OakGrain" : "WalnutGrain").opacity(palette.theme == .oak ? 0.4 : 0.7)
+                    }
                 }
             }
             // Lamplight on the middle of the case.
@@ -358,9 +351,9 @@ struct ShelfLedge: View {
             LinearGradient(colors: [palette.ledgeFace.mix(with: palette.ledgeTop, by: 0.3), palette.ledgeFace, palette.ledgeFace.mix(with: .black, by: 0.2)], startPoint: .top, endPoint: .bottom)
                 .frame(height: 12)
         }
-        .overlay {
-            if contrast != .increased { WoodGrain(opacity: 0.12) }
-        }
+        // The theme's tint over real grain. Bookcloth's ledges are walnut.
+        .opacity(contrast == .increased ? 1 : 0.6)
+        .background { Texture(name: palette.theme == .oak ? "OakGrain" : "WalnutGrain") }
         .shadow(color: .black.opacity(palette.hasDarkShelves ? 0.5 : 0.22), radius: 4, y: 4)
         .zIndex(1)
         .accessibilityHidden(true)
@@ -527,13 +520,18 @@ struct CoverImage: View {
                             .frame(width: 9)
                     }
                     .overlay { RoundedRectangle(cornerRadius: 2).strokeBorder(palette.onAccent.opacity(0.45), lineWidth: 0.75).padding(6) }
+                    .overlay { Texture(name: "SpineLinen").opacity(0.3).blendMode(.softLight) }
                     .overlay {
-                        Text(title)
-                            .font(Theme.stamped(14))
-                            .foregroundStyle(palette.onAccent)
-                            .multilineTextAlignment(.center)
-                            .minimumScaleFactor(0.6)
-                            .padding(12)
+                        VStack(spacing: 8) {
+                            Text(title)
+                                .font(Theme.stamped(14))
+                                .foregroundStyle(palette.onAccent)
+                                .multilineTextAlignment(.center)
+                                .minimumScaleFactor(0.6)
+                            FoilOrnament(seed: title.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }, tint: nil)
+                                .frame(width: 32, height: 32)
+                        }
+                        .padding(12)
                     }
                     .clipShape(.rect(cornerRadius: 4))
                     .aspectRatio(2 / 3, contentMode: .fit)
@@ -543,5 +541,26 @@ struct CoverImage: View {
             guard let cover, let data = await library.image(for: cover) else { return }
             image = UIImage(data: data)
         }
+    }
+}
+
+/// A gold-foil motif stamped on a binding: a mountain, a sprig or an arch, the same for a `seed`
+/// every time. Given a `tint`, it is printed in that ink instead of foil.
+struct FoilOrnament: View {
+    let seed: Int
+    let tint: Color?
+
+    private static let motifs = ["FoilMountain", "FoilSprig", "FoilArch"]
+
+    var body: some View {
+        let name = Self.motifs[Int(seed.magnitude % UInt(Self.motifs.count))]
+        Group {
+            if let tint {
+                Image(name).renderingMode(.template).resizable().scaledToFit().foregroundStyle(tint)
+            } else {
+                Image(name).resizable().interpolation(.high).scaledToFit()
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
