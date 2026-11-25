@@ -619,7 +619,7 @@ private struct Sprig: View {
         }
     }
 
-    private struct Stem: Shape {
+    private nonisolated struct Stem: Shape {
         func path(in rect: CGRect) -> Path {
             let s = min(rect.width, rect.height) / 100
             var path = Path()
@@ -632,7 +632,7 @@ private struct Sprig: View {
         }
     }
 
-    private struct Leaves: Shape {
+    private nonisolated struct Leaves: Shape {
         func path(in rect: CGRect) -> Path {
             let s = min(rect.width, rect.height) / 100
             var leaf = Path()
@@ -725,7 +725,7 @@ private struct Ferrule: View {
 }
 
 /// A label with its two lower corners cut off.
-private struct CutCorners: Shape {
+private nonisolated struct CutCorners: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.minY))
@@ -740,7 +740,7 @@ private struct CutCorners: Shape {
 }
 
 /// Narrower at the top than at the foot.
-private struct Trapezoid: Shape {
+private nonisolated struct Trapezoid: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.move(to: CGPoint(x: rect.minX + rect.width * 0.06, y: rect.minY))
