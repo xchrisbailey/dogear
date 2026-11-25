@@ -7,9 +7,11 @@ import Foundation
 /// way a shelf looks uneven like a real one and a Book never changes shape between launches or
 /// devices.
 public struct Spine: Sendable, Equatable {
-    public static let thicknesses: ClosedRange<Double> = 26 ... 46
-    public static let heights: ClosedRange<Double> = 160 ... 196
-    public static let fontSizes: ClosedRange<Double> = 12 ... 19
+    /// Wide enough for a title read across the spine, a few words to a line.
+    public static let thicknesses: ClosedRange<Double> = 56 ... 84
+    public static let heights: ClosedRange<Double> = 152 ... 168
+    /// Never below 13 pt, so a title reads at arm's length.
+    public static let fontSizes: ClosedRange<Double> = 13 ... 15
     /// Ebook file sizes, in kilobytes, that span thinnest to thickest. A novel as an EPUB is a
     /// few hundred kilobytes and an illustrated book or a PDF tens of megabytes, so thickness
     /// follows the size's order of magnitude.
@@ -35,8 +37,8 @@ public struct Spine: Sendable, Equatable {
         fallbackColor = SpineColor.palette[Int(Self.mixed(book.id, salt: 3) % UInt64(SpineColor.palette.count))]
     }
 
-    /// A spine is narrow, so it carries the main title only: no subtitle, no leading article.
-    /// "The Odyssey" is "Odyssey"; "Moby-Dick; or, The Whale" is "Moby-Dick".
+    /// A spine carries the main title only, without a subtitle: "Moby-Dick; or, The Whale" is
+    /// "Moby-Dick". The title reads across the spine, so a leading article stays.
     public static func title(for title: String) -> String {
         var short = title.trimmingCharacters(in: .whitespaces)
         for separator in [":", ";", " - ", " – ", " — "] {
@@ -44,11 +46,6 @@ public struct Spine: Sendable, Equatable {
                 let main = short[..<cut.lowerBound].trimmingCharacters(in: .whitespaces)
                 if !main.isEmpty { short = main }
             }
-        }
-        for article in ["the ", "an ", "a "] where short.lowercased().hasPrefix(article) {
-            let rest = short.dropFirst(article.count).trimmingCharacters(in: .whitespaces)
-            if !rest.isEmpty { short = rest }
-            break
         }
         return short
     }

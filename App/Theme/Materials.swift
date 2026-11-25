@@ -1,65 +1,174 @@
 import DogearCore
 import SwiftUI
 
-/// The physical look shared by the Library, readers and player: wood, felt, brass, cloth, leather, paper and the
-/// lettering that goes on them. Screens compose these instead of picking their own colors.
+/// Materials that look the same in every app theme: the ribbon in a Book, the wrapping on one Dogear
+/// can't open, cassette tape, and the desk an open Book lies on. Everything that changes with the
+/// theme is in ``Palette``.
 enum Theme {
-    /// The felt lining behind the bookcase.
-    static let felt = [Color(hex: 0x2F2A26), Color(hex: 0x211D1A)]
-    /// The back of the bookcase, behind the spines.
-    static let backPanel = Color(hex: 0x1F120A)
-    static let ledge = [Color(hex: 0x8A5A36), Color(hex: 0x6B4126), Color(hex: 0x4A2B18)]
-    static let brass = [Color(hex: 0xF3DC9A), Color(hex: 0xC9A04F), Color(hex: 0x9C7428), Color(hex: 0xD8B467)]
-    /// Engraved text on brass.
-    static let engraved = Color(hex: 0x3A2610)
-    /// Gold lettering on wood.
-    static let gilt = Color(hex: 0xE8C77A)
-    static let paper = Color(hex: 0xF4EAD2)
-    static let ink = Color(hex: 0x3B2A1A)
-    static let inkSoft = Color(hex: 0x5B4A36)
-    /// Handwriting on labels.
-    static let pen = Color(hex: 0x1D2B4F)
     static let ribbon = Color(hex: 0xB3262E)
+    static let ribbonDark = Color(hex: 0x8C1C1C)
     static let kraft = SpineColor(red: 0.655, green: 0.510, blue: 0.353)
+    /// A Download running.
     static let glow = Color(hex: 0x8EF0C1)
-    static let cassetteShell = [Color(hex: 0x2B2B2E), Color(hex: 0x18181A)]
     static let tape = Color(hex: 0x4A2E1C)
+    /// The dark window of a cassette or player.
+    static let window = [Color(hex: 0x2A211B), Color(hex: 0x120D0A)]
     /// The desk an open Book lies on, lit from above its middle.
     static let desk = [Color(hex: 0x3A2314), Color(hex: 0x170D07)]
     static let coverBoard = Color(hex: 0x5A1418)
-    static let leather = [Color(hex: 0x3D0E12), Color(hex: 0x5A1418)]
-    /// Gold foil stamped into leather.
-    static let foil = Color(hex: 0xF1D38A)
-    static let ribbonDark = Color(hex: 0x8C1C1C)
-    /// Green linen book cloth, lit from above its middle, for the Library's title board.
-    static let bookCloth = [Color(hex: 0x3E5C49), Color(hex: 0x2B4234), Color(hex: 0x243729)]
-    /// Cream ink pressed into book cloth: at least 5.8:1 against every shade of the cloth.
-    static let clothInk = Color(hex: 0xEDE3CC)
-    /// Tan leather tabs, and the darker one pushed into its tray.
-    static let tabLeather = [Color(hex: 0x6A4630), Color(hex: 0x553621)]
-    static let tabLeatherPressed = [Color(hex: 0x3A2416), Color(hex: 0x4A2E1C)]
-    static let tabLettering = Color(hex: 0xC9AE88)
-    static let tabLetteringPressed = Color(hex: 0xF1E3C8)
-    static let stitching = Color(hex: 0xE6C8A0)
-    static let tabTray = Color(hex: 0x24140B)
-    /// Controls and marks on the Library that aren't lettering: the tan of the tab lettering.
-    static let accent = tabLettering
-    /// Dark iron, for eyelets.
-    static let iron = Color(hex: 0x5A5652)
     /// A knot of cream thread, from light top to shaded foot.
     static let thread = [Color(hex: 0xF4EAD2), Color(hex: 0xE6C8A0), Color(hex: 0x8A6E4E)]
 
-    /// Nameplates and covers.
-    static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .heavy, design: .serif) }
-    /// Lettering stamped on spines. Fixed size: a spine is an object, and VoiceOver reads the Book.
-    static func stamped(_ size: CGFloat) -> Font { .system(size: size, weight: .bold, design: .serif) }
-    /// Shelf labels, drawer buttons and notes: the system sans, scaling with Dynamic Type.
+    /// Lettering stamped on spines and cassette labels. Fixed size: a spine is an object, and
+    /// VoiceOver reads the Book.
+    static func stamped(_ size: CGFloat) -> Font { .system(size: size, weight: .semibold, design: .serif) }
+    /// Notes and small labels: the system sans, scaling with Dynamic Type.
     static func label(_ style: Font.TextStyle) -> Font { .system(style, weight: .semibold) }
-    /// Titles on a cassette face, fixed like spine lettering.
-    static func cassetteLabel(_ size: CGFloat) -> Font { .system(size: size, weight: .bold) }
 }
 
-extension Color {
+/// The app theme's colors, by role. Screens read it from the environment, so changing the theme
+/// in Settings redraws everything at once without reloading a Book or the player.
+nonisolated struct Palette: Equatable, Sendable {
+    let theme: AppTheme
+    /// Behind everything, including the navigation bar.
+    let canvas: Color
+    /// Paper raised off the canvas: cards, labels, the search field, the cassette label.
+    let raised: Color
+    /// Text straight on the canvas.
+    let text: Color
+    let textSecondary: Color
+    /// Text on paper, whatever the theme.
+    let ink: Color
+    let inkSecondary: Color
+    /// The filled control and progress, and what sits on that fill.
+    let accent: Color
+    let onAccent: Color
+    let shelfBacking: Color
+    let ledgeTop: Color
+    let ledgeFace: Color
+    /// Decorative edges.
+    let outline: Color
+    /// Edges a control needs to be seen: 3:1 against the canvas.
+    let boundary: Color
+    let shell: Color
+    let shellTrim: Color
+    /// A lighter wash over the top of the canvas, for daylight.
+    let canvasLight: Color?
+
+    /// Lettering of a small action straight on the canvas. Rust on bottle green is too dark for
+    /// small text, so Bookcloth letters those in cream.
+    var canvasAction: Color { theme == .bookcloth ? text : accent }
+    /// Lettering of an action on paper: dark ink in Bookcloth, where rust is for fills.
+    var paperAction: Color { theme == .bookcloth ? ink : accent }
+    /// The appearance the canvas reads as, for system controls and the status bar.
+    var scheme: ColorScheme { theme.hasDarkCanvas ? .dark : .light }
+    /// Whether the shelves are dark wood, so text straight on them is light.
+    var hasDarkShelves: Bool { theme != .oak }
+
+    init(_ theme: AppTheme) {
+        self.theme = theme
+        switch theme {
+        case .walnut:
+            canvas = Color(hex: 0xF4E8D7)
+            raised = Color(hex: 0xFFF4E3)
+            text = Color(hex: 0x2F1C13)
+            textSecondary = Color(hex: 0x655045)
+            ink = Color(hex: 0x2F1C13)
+            inkSecondary = Color(hex: 0x655045)
+            accent = Color(hex: 0x673922)
+            onAccent = Color(hex: 0xFFF4E3)
+            shelfBacking = Color(hex: 0x352217)
+            ledgeTop = Color(hex: 0x9F673E)
+            ledgeFace = Color(hex: 0x633A24)
+            outline = Color(hex: 0xBDA891)
+            boundary = Color(hex: 0x8C735F)
+            shell = Color(hex: 0xE8D0AB)
+            shellTrim = Color(hex: 0x513426)
+            canvasLight = nil
+        case .oak:
+            canvas = Color(hex: 0xF5EFE5)
+            raised = Color(hex: 0xFFFAF1)
+            text = Color(hex: 0x292F21)
+            textSecondary = Color(hex: 0x535C4C)
+            ink = Color(hex: 0x292F21)
+            inkSecondary = Color(hex: 0x535C4C)
+            accent = Color(hex: 0x4E644A)
+            onAccent = Color(hex: 0xFFFAF1)
+            shelfBacking = Color(hex: 0xE7D6B8)
+            ledgeTop = Color(hex: 0xDEAB70)
+            ledgeFace = Color(hex: 0xAB713F)
+            outline = Color(hex: 0xBDB4A6)
+            boundary = Color(hex: 0x807664)
+            shell = Color(hex: 0xEEE1C7)
+            shellTrim = Color(hex: 0x526749)
+            canvasLight = Color(hex: 0xFBF8F2)
+        case .bookcloth:
+            canvas = Color(hex: 0x103B31)
+            raised = Color(hex: 0xF3E4C9)
+            text = Color(hex: 0xFFF3DF)
+            textSecondary = Color(hex: 0xD2DFD2)
+            ink = Color(hex: 0x17352A)
+            inkSecondary = Color(hex: 0x455A4E)
+            accent = Color(hex: 0xD45F35)
+            onAccent = Color(hex: 0x18120F)
+            shelfBacking = Color(hex: 0x123D33)
+            ledgeTop = Color(hex: 0x9C623D)
+            ledgeFace = Color(hex: 0x633B29)
+            outline = Color(hex: 0x62887A)
+            boundary = Color(hex: 0x799C8F)
+            shell = Color(hex: 0xE8D7B7)
+            shellTrim = Color(hex: 0x26463B)
+            canvasLight = nil
+        }
+    }
+}
+
+private nonisolated struct PaletteKey: EnvironmentKey {
+    static let defaultValue = Palette(.standard)
+}
+
+nonisolated extension EnvironmentValues {
+    var palette: Palette {
+        get { self[PaletteKey.self] }
+        set { self[PaletteKey.self] = newValue }
+    }
+}
+
+/// The app theme saved on this device.
+enum AppearancePreferences {
+    /// Read through `@AppStorage` at the root and in Settings, so a change shows at once.
+    static let themeKey = "app.theme"
+}
+
+extension View {
+    /// Draws everything under it in `theme`: its palette, and light or dark system controls and
+    /// status bar to match the canvas.
+    func appTheme(_ theme: AppTheme) -> some View {
+        let palette = Palette(theme)
+        return environment(\.palette, palette)
+            .preferredColorScheme(palette.scheme)
+            .tint(palette.canvasAction)
+    }
+
+    /// A serif title that grows with Dynamic Type from `size` at the default text size.
+    func serifTitle(_ size: CGFloat, relativeTo style: Font.TextStyle) -> some View {
+        modifier(SerifTitle(size: size, style: style))
+    }
+}
+
+private struct SerifTitle: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+
+    init(size: CGFloat, style: Font.TextStyle) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: style)
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: .semibold, design: .serif))
+    }
+}
+
+nonisolated extension Color {
     init(hex: UInt32) {
         self.init(
             red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255
@@ -71,217 +180,332 @@ extension Color {
     }
 }
 
-/// Warm charcoal wool behind the shelves, like a drawer lining: quiet, so the Books carry the color.
-struct FeltBackground: View {
+/// The theme's canvas under a screen: paper with a faint grain, oat paper in daylight, or green
+/// linen. Texture stays faint, and goes with Increase Contrast.
+struct CanvasBackground: View {
+    @Environment(\.palette) private var palette
+    @Environment(\.colorSchemeContrast) private var contrast
+
     var body: some View {
-        LinearGradient(colors: Theme.felt, startPoint: .top, endPoint: .bottom)
-            // Light pooled at the top, falling off toward the edges.
+        palette.canvas
             .overlay {
-                RadialGradient(colors: [.white.opacity(0.05), .clear], center: .top, startRadius: 0, endRadius: 420)
+                if let light = palette.canvasLight {
+                    // Daylight from the top leading corner.
+                    LinearGradient(colors: [light, light.opacity(0)], startPoint: .topLeading, endPoint: .center)
+                }
             }
             .overlay {
-                EllipticalGradient(colors: [.clear, .black.opacity(0.35)], center: .center, startRadiusFraction: 0.35, endRadiusFraction: 0.75)
+                if contrast != .increased {
+                    if palette.theme == .bookcloth { Linen(opacity: 0.05) } else { Grain(opacity: 0.04) }
+                }
             }
-            .overlay { Fibers() }
             .ignoresSafeArea()
             .accessibilityHidden(true)
     }
+}
 
-    /// Speckle from the wool. Seeded, so it doesn't shimmer when the view redraws.
-    private struct Fibers: View {
-        var body: some View {
-            Canvas { context, size in
-                var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
-                func next() -> CGFloat {
-                    seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
-                    return CGFloat(seed >> 33) / CGFloat(UInt32.max >> 1)
-                }
-                let count = Int(size.width * size.height / 40)
-                for _ in 0..<count {
-                    let dot = Path(CGRect(x: next() * size.width, y: next() * size.height, width: 1, height: 1))
-                    let light = next() > 0.5
-                    context.fill(dot, with: .color(light ? .white.opacity(0.04) : .black.opacity(0.18)))
-                }
+/// Speckle from paper fibres. Seeded, so it doesn't shimmer when the view redraws.
+private struct Grain: View {
+    let opacity: Double
+
+    var body: some View {
+        Canvas { context, size in
+            var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+            func next() -> CGFloat {
+                seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+                return CGFloat(seed >> 33) / CGFloat(UInt32.max >> 1)
             }
-            .drawingGroup()
+            let count = Int(size.width * size.height / 60)
+            for _ in 0 ..< count {
+                let dot = Path(CGRect(x: next() * size.width, y: next() * size.height, width: 1, height: 1))
+                context.fill(dot, with: .color(.black.opacity(opacity * (next() > 0.5 ? 1 : 2))))
+            }
         }
+        .drawingGroup()
+        .allowsHitTesting(false)
     }
 }
 
-/// The front edge of a shelf, under a row of Books.
-struct ShelfLedge: View {
+/// The weave of book cloth: fine light weft over darker warp, too small to read as stripes.
+struct Linen: View {
+    let opacity: Double
+
     var body: some View {
-        LinearGradient(colors: Theme.ledge, startPoint: .top, endPoint: .bottom)
-            .frame(height: 16)
-            .overlay(alignment: .top) { Color.white.opacity(0.25).frame(height: 1) }
-            .clipShape(.rect(cornerRadius: 2))
-            .shadow(color: .black.opacity(0.55), radius: 8, y: 8)
+        Canvas { context, size in
+            var y: CGFloat = 0
+            while y < size.height {
+                context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 1)), with: .color(.white.opacity(opacity)))
+                y += 3
+            }
+            var x: CGFloat = 0
+            while x < size.width {
+                context.fill(Path(CGRect(x: x, y: 0, width: 1, height: size.height)), with: .color(.black.opacity(opacity * 2)))
+                x += 3
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Long streaks of grain running along a board.
+struct WoodGrain: View {
+    let opacity: Double
+    var vertical = false
+
+    var body: some View {
+        Canvas { context, size in
+            var seed: UInt64 = 0xD1B5_4A32_D192_ED03
+            func next() -> CGFloat {
+                seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+                return CGFloat(seed >> 33) / CGFloat(UInt32.max >> 1)
+            }
+            let across = vertical ? size.width : size.height
+            let along = vertical ? size.height : size.width
+            var offset: CGFloat = 0
+            while offset < across {
+                let width = 0.5 + next() * 1.5
+                let dark = next() > 0.4
+                let start = next() * along * 0.3
+                let rect = vertical
+                    ? CGRect(x: offset, y: start, width: width, height: along)
+                    : CGRect(x: start, y: offset, width: along, height: width)
+                context.fill(Path(rect), with: .color(dark ? .black.opacity(opacity) : .white.opacity(opacity * 0.6)))
+                offset += 2 + next() * 5
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The back of the bookcase behind a row, in the theme's wood or cloth.
+struct ShelfBacking: View {
+    @Environment(\.palette) private var palette
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        palette.shelfBacking
+            .overlay {
+                if contrast != .increased {
+                    if palette.theme == .bookcloth { Linen(opacity: 0.05) } else { WoodGrain(opacity: 0.1, vertical: true) }
+                }
+            }
+            // Shade under the shelf above.
+            .overlay(alignment: .top) {
+                LinearGradient(colors: [.black.opacity(0.25), .clear], startPoint: .top, endPoint: .bottom).frame(height: 14)
+            }
             .accessibilityHidden(true)
     }
 }
 
-/// A stitched leather tag naming a shelf, lettered like the tabs above it but smaller and in capitals.
-struct ShelfLabel: View {
+/// The front edge of a shelf: its lit top and its face, with a visible lip.
+struct ShelfLedge: View {
+    @Environment(\.palette) private var palette
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        VStack(spacing: 0) {
+            palette.ledgeTop.frame(height: 3)
+            palette.ledgeFace
+                .overlay {
+                    if contrast != .increased { WoodGrain(opacity: 0.12) }
+                }
+                .frame(height: 7)
+        }
+        .overlay(alignment: .top) { Color.white.opacity(0.2).frame(height: 1) }
+        .shadow(color: .black.opacity(0.3), radius: 3, y: 3)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A section heading on the bookcase, on a paper label so it reads on any wood.
+struct ShelfHeading: View {
     let text: String
+
+    @Environment(\.palette) private var palette
 
     init(_ text: String) {
         self.text = text
     }
 
     var body: some View {
-        Text(text.uppercased())
-            .font(Theme.stamped(12))
-            .tracking(2)
-            .foregroundStyle(Theme.tabLettering)
-            .shadow(color: .black.opacity(0.5), radius: 0, y: -1)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 7)
-            .background {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(LinearGradient(colors: Theme.tabLeather, startPoint: .top, endPoint: .bottom))
-                    .overlay(alignment: .top) { Color.white.opacity(0.1).frame(height: 1).clipShape(.rect(cornerRadius: 4)) }
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 2)
-                    .strokeBorder(Theme.stitching.opacity(0.28), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
-                    .padding(3)
-                    .accessibilityHidden(true)
-            }
-            .shadow(color: .black.opacity(0.5), radius: 2, y: 2)
-            .accessibilityLabel(text)
+        Text(text)
+            .serifTitle(20, relativeTo: .title3)
+            .foregroundStyle(palette.ink)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(palette.raised, in: .rect(cornerRadius: 6))
+            .shadow(color: .black.opacity(0.2), radius: 1.5, y: 1)
             .accessibilityAddTraits(.isHeader)
     }
 }
 
-/// A board covered in linen book cloth, its title stamped in cream ink.
-struct ClothBoard: View {
-    let title: String
-    let subtitle: String
+/// A paper card raised off the canvas.
+struct PaperCard: ViewModifier {
+    var radius: CGFloat = 14
 
-    var body: some View {
-        VStack(spacing: 3) {
-            Text(title)
-                .font(Theme.display(28))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            Text(subtitle.uppercased())
-                .font(Theme.stamped(11))
-                .tracking(2.5)
-        }
-        .foregroundStyle(Theme.clothInk)
-        // Pressed in: the cloth's edge shades the top of each letter.
-        .shadow(color: .black.opacity(0.55), radius: 0.5, y: -1)
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 18)
-        .background {
-            RadialGradient(colors: Theme.bookCloth, center: .top, startRadius: 0, endRadius: 260)
-                .overlay { Linen() }
-                .overlay {
-                    // The blind-stamped border, inset from the board's edge.
-                    RoundedRectangle(cornerRadius: 3)
-                        .strokeBorder(.black.opacity(0.35), lineWidth: 1)
-                        .shadow(color: .white.opacity(0.09), radius: 0, y: 1)
-                        .padding(9)
-                }
-                .overlay(alignment: .top) { Color.white.opacity(0.12).frame(height: 1) }
-                .clipShape(.rect(cornerRadius: 5))
-        }
-        .shadow(color: .black.opacity(0.55), radius: 5, y: 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
-    }
+    @Environment(\.palette) private var palette
 
-    /// The weave: fine light weft over darker warp, too small to read as stripes.
-    private struct Linen: View {
-        var body: some View {
-            Canvas { context, size in
-                var y: CGFloat = 0
-                while y < size.height {
-                    context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 1)), with: .color(.white.opacity(0.045)))
-                    y += 3
-                }
-                var x: CGFloat = 0
-                while x < size.width {
-                    context.fill(Path(CGRect(x: x, y: 0, width: 1, height: size.height)), with: .color(.black.opacity(0.12)))
-                    x += 3
-                }
-            }
-            .accessibilityHidden(true)
-        }
+    func body(content: Content) -> some View {
+        content
+            .foregroundStyle(palette.ink)
+            .background(palette.raised, in: .rect(cornerRadius: radius))
+            .overlay { RoundedRectangle(cornerRadius: radius).strokeBorder(palette.outline.opacity(0.6), lineWidth: 1) }
+            .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
+            // Paper is light in every theme, so system text and controls on it are too.
+            .environment(\.colorScheme, .light)
+            .tint(palette.paperAction)
     }
 }
 
-/// A row of stitched leather tabs set in a dark tray, for choosing one of a few.
-struct LeatherTabs<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        HStack(spacing: 4) { content }
-            .padding(4)
-            .background {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(Theme.tabTray.shadow(.inner(color: .black.opacity(0.6), radius: 3, y: 2)))
-                    .shadow(color: .white.opacity(0.08), radius: 0, y: 1)
-            }
+extension View {
+    func paperCard(radius: CGFloat = 14) -> some View {
+        modifier(PaperCard(radius: radius))
     }
 }
 
-/// A leather tab in a ``LeatherTabs`` tray that sinks in while it's the one chosen.
-struct LeatherTabStyle: ButtonStyle {
-    let isOn: Bool
+/// The highest-priority action: the accent fill.
+struct FilledActionStyle: ButtonStyle {
+    @Environment(\.palette) private var palette
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        let pressed = isOn || configuration.isPressed
         configuration.label
-            .font(Theme.label(.subheadline))
-            .foregroundStyle(pressed ? Theme.tabLetteringPressed : Theme.tabLettering)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .background {
-                let shape = RoundedRectangle(cornerRadius: 4)
-                shape
-                    .fill(
-                        LinearGradient(colors: pressed ? Theme.tabLeatherPressed : Theme.tabLeather, startPoint: .top, endPoint: .bottom)
-                            .shadow(.inner(color: .black.opacity(pressed ? 0.65 : 0), radius: 3, y: 3))
-                    )
-                    .overlay(alignment: .top) {
-                        if !pressed { Color.white.opacity(0.12).frame(height: 1).clipShape(shape) }
-                    }
-                    .shadow(color: .black.opacity(pressed ? 0 : 0.4), radius: 1, y: 2)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 3)
-                    .strokeBorder(Theme.stitching.opacity(pressed ? 0.2 : 0.28), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
-                    .padding(4)
-                    .accessibilityHidden(true)
-            }
+            .font(.body.weight(.semibold))
+            .foregroundStyle(palette.onAccent)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .padding(.horizontal, 16)
+            .background(palette.accent, in: .rect(cornerRadius: 12))
+            .opacity(!isEnabled ? 0.45 : configuration.isPressed ? 0.8 : 1)
     }
 }
 
-/// A paper tag hung from the shelf by an iron eyelet, for notices.
-struct PaperTag<Content: View>: View {
-    var edge: Color = Theme.inkSoft
-    @ViewBuilder var content: Content
+/// Any other action: an outline in the strong control boundary, lettered like the canvas, or
+/// like paper when `onPaper`.
+struct OutlinedActionStyle: ButtonStyle {
+    var onPaper = false
+    var fillsWidth = true
+
+    @Environment(\.palette) private var palette
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(onPaper ? palette.ink : palette.text)
+            .lineLimit(2)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 14)
+            .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: 44)
+            .background {
+                Capsule()
+                    .fill(configuration.isPressed ? (onPaper ? palette.ink : palette.text).opacity(0.08) : .clear)
+                Capsule().strokeBorder(onPaper ? palette.inkSecondary : palette.boundary, lineWidth: 1)
+            }
+            .contentShape(.capsule)
+            .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
+/// A row of segments for choosing one of a few. The chosen one is filled with the accent.
+struct Segments<Value: Hashable>: View {
+    @Binding var selection: Value
+    let choices: [(name: String, value: Value)]
+    /// On a paper card rather than the canvas.
+    var onPaper = false
+
+    @Environment(\.palette) private var palette
 
     var body: some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(Theme.backPanel)
-                .frame(width: 9, height: 9)
-                .overlay { Circle().stroke(Theme.iron, lineWidth: 2) }
-                .accessibilityHidden(true)
-            content
-                .frame(maxWidth: .infinity, alignment: .leading)
+        let line = onPaper ? palette.inkSecondary : palette.boundary
+        HStack(spacing: 0) {
+            ForEach(Array(choices.enumerated()), id: \.offset) { index, choice in
+                let isOn = choice.value == selection
+                if index > 0 {
+                    line.opacity(isOn || choices[index - 1].value == selection ? 0 : 0.6)
+                        .frame(width: 1, height: 22)
+                }
+                Button { selection = choice.value } label: {
+                    Text(choice.name)
+                        .font(.subheadline.weight(isOn ? .semibold : .regular))
+                        .foregroundStyle(isOn ? palette.onAccent : onPaper ? palette.ink : palette.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .padding(.horizontal, 10)
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                        .background { if isOn { Capsule().fill(palette.accent) } }
+                        .frame(minHeight: 44)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isOn ? .isSelected : [])
+            }
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 12)
-        .background(Theme.paper)
-        .overlay(alignment: .leading) { edge.frame(width: 4) }
-        .clipShape(.rect(cornerRadius: 3))
-        .shadow(color: .black.opacity(0.5), radius: 5, y: 4)
-        // Paper is light whatever the device's appearance, so its text is always ink.
-        .environment(\.colorScheme, .light)
+        .padding(.horizontal, 3)
+        .background { Capsule().strokeBorder(line, lineWidth: 1).padding(.vertical, 2) }
+        .animation(.snappy(duration: 0.15), value: selection)
+        .sensoryFeedback(.selection, trigger: selection)
+    }
+}
+
+/// A paper tag for notices, its left edge colored by what kind of notice it is.
+struct PaperTag<Content: View>: View {
+    var edge: Color?
+    @ViewBuilder var content: Content
+
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .padding(.leading, 4)
+            .background(palette.raised)
+            .overlay(alignment: .leading) { (edge ?? palette.inkSecondary).frame(width: 4) }
+            .clipShape(.rect(cornerRadius: 10))
+            .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(palette.outline.opacity(0.6), lineWidth: 1) }
+            .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            // Paper is light whatever the theme, so its text is always ink.
+            .environment(\.colorScheme, .light)
+    }
+}
+
+/// A Book's cover, or a plain title-led stand-in when it has none or it hasn't loaded.
+struct CoverImage: View {
+    let cover: Cover?
+    let title: String
+    let library: Library
+
+    @State private var image: UIImage?
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(.rect(cornerRadius: 4))
+            } else {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(palette.raised)
+                    .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(palette.outline, lineWidth: 1) }
+                    .overlay {
+                        Text(title)
+                            .font(Theme.stamped(13))
+                            .foregroundStyle(palette.ink)
+                            .multilineTextAlignment(.center)
+                            .minimumScaleFactor(0.6)
+                            .padding(8)
+                    }
+                    .aspectRatio(2 / 3, contentMode: .fit)
+            }
+        }
+        .task(id: cover) {
+            guard let cover, let data = await library.image(for: cover) else { return }
+            image = UIImage(data: data)
+        }
     }
 }

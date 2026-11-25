@@ -133,11 +133,13 @@ private struct PageEdges: View {
     }
 }
 
-/// The readers' top bar: a strip of the cover's leather with gilt lettering.
-struct LeatherBar<Actions: View>: View {
+/// The readers' top bar, on a solid strip of the app theme's canvas so it reads over any page.
+struct ReaderBar<Actions: View>: View {
     let title: String
     let close: () -> Void
     @ViewBuilder var actions: Actions
+
+    @Environment(\.palette) private var palette
 
     var body: some View {
         HStack(spacing: 0) {
@@ -145,35 +147,36 @@ struct LeatherBar<Actions: View>: View {
             Spacer()
             actions
         }
-        .buttonStyle(GiltButtonStyle())
+        .buttonStyle(ReaderBarButtonStyle())
         .labelStyle(.iconOnly)
         .padding(.horizontal, 8)
         .frame(height: 52)
         .background {
             Text(title)
-                .font(Theme.stamped(16))
-                .tracking(1.5)
+                .font(.system(.headline, design: .serif, weight: .semibold))
                 .lineLimit(1)
-                .foregroundStyle(Theme.foil)
+                .foregroundStyle(palette.text)
                 .padding(.horizontal, 104)
                 .accessibilityAddTraits(.isHeader)
         }
         .background {
-            LinearGradient(colors: Theme.leather, startPoint: .top, endPoint: .bottom)
-                .overlay(alignment: .bottom) { Theme.foil.opacity(0.5).frame(height: 1) }
-                .shadow(color: .black.opacity(0.5), radius: 7, y: 6)
+            palette.canvas
+                .overlay(alignment: .bottom) { palette.outline.frame(height: 1) }
+                .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
                 .ignoresSafeArea(edges: .top)
         }
+        .environment(\.colorScheme, palette.scheme)
     }
 }
 
-private struct GiltButtonStyle: ButtonStyle {
+private struct ReaderBarButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.palette) private var palette
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 18, weight: .semibold))
-            .foregroundStyle(Theme.foil)
+            .foregroundStyle(palette.canvasAction)
             .opacity(!isEnabled ? 0.35 : configuration.isPressed ? 0.6 : 1)
             .frame(width: 44, height: 44)
             .contentShape(.rect)
@@ -185,15 +188,17 @@ struct PaperSlip: View {
     let text: String
     let dismiss: () -> Void
 
+    @Environment(\.palette) private var palette
+
     var body: some View {
         Button(action: dismiss) {
             Label(text, systemImage: "wifi.exclamationmark")
                 .font(Theme.label(.subheadline))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(palette.ink)
                 .padding(.vertical, 8)
                 .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.paper, in: .rect(cornerRadius: 2))
+                .background(palette.raised, in: .rect(cornerRadius: 8))
                 .shadow(color: .black.opacity(0.5), radius: 4, y: 3)
         }
         .buttonStyle(.plain)

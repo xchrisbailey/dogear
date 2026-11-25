@@ -2,9 +2,8 @@ import DogearCore
 @preconcurrency import ReadiumNavigator
 import SwiftUI
 
-/// Everything the reader can set for the whole app: their account, the reader's defaults,
-/// the player's skin and keys, Downloads and versions. Paper cards on the Library's felt, each named
-/// by a leather tag.
+/// Everything the reader can set for the whole app: the app theme, their account, the reader's
+/// defaults, the player's keys, Downloads and versions. Paper cards on the theme's canvas.
 struct SettingsView: View {
     let session: Session
 
@@ -13,23 +12,24 @@ struct SettingsView: View {
     /// The same values the reader's own sheet edits, so the two never disagree.
     @State private var reading = ReadingPreferences.load()
     @State private var listening = ListeningPreferences.load()
-    /// The player reads the same key, so a new Player skin shows at once, even mid-listen.
-    @AppStorage(ListeningPreferences.skinKey) private var storedSkin: String?
+    /// The root reads the same key, so a new theme shows at once, even mid-listen.
+    @AppStorage(AppearancePreferences.themeKey) private var storedTheme: String?
+    @Environment(\.palette) private var palette
     @State private var isShowingDownloads = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    // Drawn here rather than as the navigation title, which a sheet letters in
-                    // the system's black and loses on the felt.
                     Text("Settings")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(Theme.clothInk)
-                        .shadow(color: .black.opacity(0.5), radius: 0, y: 1)
+                        .serifTitle(34, relativeTo: .largeTitle)
+                        .foregroundStyle(palette.text)
                         .padding(.horizontal, 4)
                         .padding(.top, 4)
                         .accessibilityAddTraits(.isHeader)
+                    SettingsSection("Appearance") {
+                        ThemeTiles(selection: Binding { AppTheme(stored: storedTheme) } set: { storedTheme = $0.rawValue })
+                    }
                     SettingsSection("Account") { account }
                     SettingsSection("Reading") { readingRows }
                     SettingsSection("Listening") { listeningRows }
@@ -43,19 +43,19 @@ struct SettingsView: View {
                 .frame(maxWidth: 600)
                 .frame(maxWidth: .infinity)
             }
-            .background { FeltBackground() }
+            .background { CanvasBackground() }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(palette.canvas, for: .navigationBar)
+            .toolbarColorScheme(palette.scheme, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                         .fontWeight(.semibold)
-                        .tint(Theme.clothInk)
+                        .tint(palette.canvasAction)
                 }
             }
             .sheet(isPresented: $isShowingDownloads) { DownloadsView() }
         }
-        // Dark chrome to match the felt; the paper cards set their own light appearance.
-        .preferredColorScheme(.dark)
         .onChange(of: reading) { _, reading in ReadingPreferences.save(reading) }
         .onChange(of: listening) { _, listening in
             ListeningPreferences.save(listening)
@@ -70,15 +70,15 @@ struct SettingsView: View {
             HStack(spacing: 12) {
                 Text(session.username.prefix(1).uppercased())
                     .font(.headline)
-                    .foregroundStyle(Theme.clothInk)
+                    .foregroundStyle(palette.onAccent)
                     .frame(width: 40, height: 40)
-                    .background(Theme.bookCloth[0], in: .circle)
+                    .background(palette.accent, in: .circle)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session.username)
                     Text(session.server.host() ?? session.server.absoluteString)
                         .font(.footnote)
-                        .foregroundStyle(Theme.inkSoft)
+                        .foregroundStyle(palette.inkSecondary)
                 }
             }
             .accessibilityElement(children: .combine)
@@ -89,7 +89,7 @@ struct SettingsView: View {
                 Text("Waiting to sync")
                 Spacer()
                 Text(model.outboxCount == 1 ? "1 Position" : "\(model.outboxCount) Positions")
-                    .foregroundStyle(Theme.inkSoft)
+                    .foregroundStyle(palette.inkSecondary)
             }
         }
         RowRule()
@@ -120,11 +120,11 @@ struct SettingsView: View {
                 step: 0.1
             )
             .fixedSize()
-            .foregroundStyle(Theme.inkSoft)
+            .foregroundStyle(palette.inkSecondary)
         }
         RowRule()
         SettingsRow {
-            Text("Theme")
+            Text("Page color")
             Spacer()
             PaperSegments(
                 selection: Binding { reading.theme ?? .light } set: { reading.theme = $0 },
@@ -169,8 +169,6 @@ struct SettingsView: View {
     // MARK: Listening
 
     @ViewBuilder private var listeningRows: some View {
-        SkinTiles(selection: Binding { PlayerSkin(stored: storedSkin) } set: { storedSkin = $0.rawValue })
-        RowRule()
         SettingsRow {
             Text("Skip back")
             Spacer()
@@ -212,7 +210,7 @@ struct SettingsView: View {
                 Text("\(DownloadsView.size(model.downloadList.totalBytes)) on this device")
                 Text(model.downloadList.downloads.count == 1 ? "1 Book file" : "\(model.downloadList.downloads.count) Book files")
                     .font(.footnote)
-                    .foregroundStyle(Theme.inkSoft)
+                    .foregroundStyle(palette.inkSecondary)
             }
         }
         RowRule()
@@ -222,7 +220,7 @@ struct SettingsView: View {
                 Spacer()
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Theme.inkSoft)
+                    .foregroundStyle(palette.inkSecondary)
             }
             .contentShape(.rect)
         }
@@ -235,13 +233,13 @@ struct SettingsView: View {
         SettingsRow {
             Text("Dogear")
             Spacer()
-            Text(Self.appVersion).foregroundStyle(Theme.inkSoft)
+            Text(Self.appVersion).foregroundStyle(palette.inkSecondary)
         }
         RowRule()
         SettingsRow {
             Text("Grimmory")
             Spacer()
-            Text(session.serverVersion ?? "Unknown").foregroundStyle(Theme.inkSoft)
+            Text(session.serverVersion ?? "Unknown").foregroundStyle(palette.inkSecondary)
         }
     }
 
@@ -288,10 +286,12 @@ private struct SignOutRow: View {
     }
 }
 
-/// A leather tag naming the section above its paper card.
+/// A heading on the canvas above its paper card.
 private struct SettingsSection<Content: View>: View {
     let title: String
     @ViewBuilder var content: Content
+
+    @Environment(\.palette) private var palette
 
     init(_ title: String, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -299,24 +299,16 @@ private struct SettingsSection<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ShelfLabel(title)
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .serifTitle(20, relativeTo: .title3)
+                .foregroundStyle(palette.text)
                 .padding(.leading, 4)
+                .accessibilityAddTraits(.isHeader)
             VStack(spacing: 0) { content }
-                .background {
-                    Theme.paper
-                        .overlay {
-                            RadialGradient(colors: [.white.opacity(0.4), .clear], center: .init(x: 0.25, y: 0.1), startRadius: 0, endRadius: 320)
-                        }
-                }
-                .clipShape(.rect(cornerRadius: 4))
-                .shadow(color: .black.opacity(0.5), radius: 5, y: 3)
-                // Paper is light whatever the device's appearance, so its text is always ink.
-                .environment(\.colorScheme, .light)
-                .foregroundStyle(Theme.ink)
-                .tint(Theme.tabLeather[0])
+                .paperCard(radius: 12)
         }
-        .padding(.top, 22)
+        .padding(.top, 24)
     }
 }
 
@@ -334,180 +326,115 @@ private struct SettingsRow<Content: View>: View {
 
 /// A faint pencil rule between rows.
 private struct RowRule: View {
+    @Environment(\.palette) private var palette
+
     var body: some View {
-        Theme.inkSoft.opacity(0.18)
+        palette.outline.opacity(0.6)
             .frame(height: 1)
             .accessibilityHidden(true)
     }
 }
 
-/// A segmented choice whose chosen segment is a leather tab sunk into the paper.
+/// A segmented choice on a settings card.
 private struct PaperSegments<Value: Hashable>: View {
     @Binding var selection: Value
     let choices: [(name: String, value: Value)]
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(choices, id: \.value) { choice in
-                let isOn = choice.value == selection
-                Button { selection = choice.value } label: {
-                    Text(choice.name)
-                        .font(.subheadline)
-                        .foregroundStyle(isOn ? Theme.tabLetteringPressed : Theme.inkSoft)
-                        .padding(.horizontal, 11)
-                        .frame(minHeight: 30)
-                        .background {
-                            if isOn {
-                                RoundedRectangle(cornerRadius: 5)
-                                    .fill(LinearGradient(colors: Theme.tabLeather, startPoint: .top, endPoint: .bottom))
-                                    .shadow(color: .black.opacity(0.35), radius: 1, y: 1)
-                            }
-                        }
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isOn ? .isSelected : [])
-            }
-        }
-        .padding(2)
-        .background(Theme.ink.opacity(0.12), in: .rect(cornerRadius: 7))
-        .animation(.snappy(duration: 0.15), value: selection)
+        Segments(selection: $selection, choices: choices, onPaper: true)
+            .fixedSize()
     }
 }
 
-/// The Player skins as small drawings of each player to tap; the chosen one sits in a leather
-/// frame.
-private struct SkinTiles: View {
-    @Binding var selection: PlayerSkin
+/// The three app themes as small pictures of each to tap. The chosen one has a check and an
+/// accent frame; picking one changes the whole app at once.
+private struct ThemeTiles: View {
+    @Binding var selection: AppTheme
+
+    @Environment(\.palette) private var palette
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Player")
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 10)], spacing: 10) {
-                tile(.pocket, name: "Pocket player")
-                tile(.hifi, name: "Hi-fi deck")
-                tile(.turntable, name: "Turntable")
-                tile(.radio, name: "Valve radio")
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 10)], spacing: 10) {
+            ForEach(AppTheme.allCases, id: \.self) { theme in
+                tile(theme)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 12)
-        .padding(.bottom, 14)
+        .padding(12)
         .sensoryFeedback(.selection, trigger: selection)
         .animation(.snappy(duration: 0.15), value: selection)
     }
 
-    private func tile(_ skin: PlayerSkin, name: String) -> some View {
-        let isOn = skin == selection
-        return Button { selection = skin } label: {
-            VStack(spacing: 6) {
-                SkinThumbnail(skin: skin)
-                    .frame(height: 92)
+    private func tile(_ theme: AppTheme) -> some View {
+        let isOn = theme == selection
+        return Button { selection = theme } label: {
+            VStack(spacing: 8) {
+                ThemePreview(palette: Palette(theme))
+                    .frame(height: 96)
                     .accessibilityHidden(true)
-                Text(name)
-                    .font(.subheadline.weight(isOn ? .semibold : .regular))
-                    .foregroundStyle(isOn ? Theme.ink : Theme.inkSoft)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                HStack(spacing: 4) {
+                    Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isOn ? palette.paperAction : palette.inkSecondary)
+                        .accessibilityHidden(true)
+                    Text(theme.name)
+                        .font(.footnote.weight(isOn ? .semibold : .regular))
+                        .foregroundStyle(palette.ink)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            .padding(8)
+            .padding(6)
             .frame(maxWidth: .infinity)
-            .background(isOn ? Theme.tabLeather[0].opacity(0.14) : Theme.ink.opacity(0.06), in: .rect(cornerRadius: 8))
+            .background(isOn ? palette.accent.opacity(0.1) : .clear, in: .rect(cornerRadius: 10))
             .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(isOn ? Theme.tabLeather[0] : .clear, lineWidth: 2)
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(isOn ? palette.paperAction : palette.outline, lineWidth: isOn ? 2 : 1)
             }
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(name)
+        .accessibilityLabel(theme.name)
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 }
 
-/// A small drawing of a Player skin: its body, its window and its keys.
-private struct SkinThumbnail: View {
-    let skin: PlayerSkin
+/// A theme in miniature: its canvas, a paper card, a shelf of spines on its wood, and its accent.
+private struct ThemePreview: View {
+    let palette: Palette
+
+    private static let spineHeights: [CGFloat] = [28, 32, 26, 30, 27]
 
     var body: some View {
-        switch skin {
-        case .pocket:
-            VStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 5)
-                    .fill(LinearGradient(colors: [Color(hex: 0x2A2C30), Color(hex: 0x0E0F11)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .overlay { RoundedRectangle(cornerRadius: 5).strokeBorder(Deck.trim, lineWidth: 2) }
-                HStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 3).fill(Color(hex: 0xF7F3E8))
-                    RoundedRectangle(cornerRadius: 3).fill(Deck.orange)
-                    RoundedRectangle(cornerRadius: 3).fill(Color(hex: 0xF7F3E8))
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                palette.text.frame(width: 34, height: 5).clipShape(.capsule)
+                palette.raised.frame(height: 9).clipShape(.capsule)
+                    .overlay { Capsule().strokeBorder(palette.boundary, lineWidth: 0.5) }
+                HStack(spacing: 2) {
+                    palette.accent.frame(height: 7).clipShape(.capsule)
+                    Capsule().strokeBorder(palette.boundary, lineWidth: 0.5).frame(height: 7)
+                    Capsule().strokeBorder(palette.boundary, lineWidth: 0.5).frame(height: 7)
                 }
-                .frame(height: 20)
             }
-            .padding(10)
-            .background(LinearGradient(colors: [Deck.bodyLight, Deck.bodyDark], startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
-        case .hifi:
-            VStack(spacing: 4) {
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Hifi.well)
-                    .overlay { RoundedRectangle(cornerRadius: 3).strokeBorder(Hifi.bezel, lineWidth: 1.5) }
-                Text("01:24:35")
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundStyle(Hifi.glow)
-                    .shadow(color: Hifi.glow.opacity(0.8), radius: 3)
-                    .padding(.horizontal, 6)
-                    .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
-                    .background(Hifi.display[0], in: .rect(cornerRadius: 3))
-                HStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 3).fill(LinearGradient(colors: Hifi.key, startPoint: .top, endPoint: .bottom))
-                    RoundedRectangle(cornerRadius: 3).fill(LinearGradient(colors: Hifi.key, startPoint: .top, endPoint: .bottom))
-                        .frame(maxWidth: .infinity)
-                        .layoutPriority(1)
-                    RoundedRectangle(cornerRadius: 3).fill(LinearGradient(colors: Hifi.key, startPoint: .top, endPoint: .bottom))
-                }
-                .frame(height: 16)
-            }
-            .padding(10)
-            .background(LinearGradient(colors: Hifi.panel, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
-        case .turntable:
-            HStack(spacing: 0) {
-                ZStack {
-                    Circle().fill(Walnut.platter[1])
-                    Circle().fill(Walnut.vinyl[1]).padding(3)
-                    Circle().fill(Theme.ribbon).frame(width: 22, height: 22)
-                }
-                .frame(width: 70, height: 70)
-                Capsule()
-                    .fill(Walnut.platter[0])
-                    .frame(width: 4, height: 62)
-                    .rotationEffect(.degrees(28), anchor: .top)
-                    .offset(x: -6, y: -2)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(4)
-            .background(LinearGradient(colors: Walnut.plinth, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 4))
             .padding(6)
-            .background(LinearGradient(colors: Walnut.wood, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
-        case .radio:
-            VStack(spacing: 6) {
-                UnevenRoundedRectangle(topLeadingRadius: 24, bottomLeadingRadius: 3, bottomTrailingRadius: 3, topTrailingRadius: 24)
-                    .fill(Bakelite.cloth)
-                    .overlay {
-                        HStack(spacing: 3) {
-                            ForEach(0 ..< 12, id: \.self) { _ in Bakelite.brass.frame(width: 2) }
-                        }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.canvas)
+            VStack(spacing: 0) {
+                HStack(alignment: .bottom, spacing: 2) {
+                    ForEach(Array(SpineColor.palette.prefix(5).enumerated()), id: \.offset) { index, color in
+                        Color(color).frame(width: 9, height: Self.spineHeights[index])
                     }
-                    .overlay {
-                        Circle().strokeBorder(Bakelite.eye, lineWidth: 4).frame(width: 16, height: 16)
-                            .shadow(color: Bakelite.eye, radius: 4)
-                    }
-                    .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, bottomLeadingRadius: 3, bottomTrailingRadius: 3, topTrailingRadius: 24))
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Bakelite.dialLight)
-                    .overlay { Theme.ribbon.frame(width: 2).offset(x: -8) }
-                    .frame(height: 20)
+                    Spacer(minLength: 0)
+                    palette.shell.frame(width: 22, height: 16).clipShape(.rect(cornerRadius: 2))
+                        .overlay { palette.shellTrim.frame(width: 14, height: 6).clipShape(.rect(cornerRadius: 1)) }
+                }
+                .padding(.horizontal, 6)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+                .background(palette.shelfBacking)
+                palette.ledgeTop.frame(height: 2)
+                palette.ledgeFace.frame(height: 4)
             }
-            .padding(10)
-            .background(LinearGradient(colors: Bakelite.body, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 6))
         }
+        .clipShape(.rect(cornerRadius: 6))
+        .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(.black.opacity(0.12), lineWidth: 1) }
     }
 }

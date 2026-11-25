@@ -32,7 +32,7 @@ enum ShelfDownload: Equatable {
     }
 }
 
-/// A Book standing on the shelf, spine out.
+/// A Book standing on the shelf, spine out, its title read across the spine near the top.
 ///
 /// A ribbon out of the top means it's being read, a knot of thread at the foot that it's downloaded,
 /// and brown paper that Dogear can't open any of its ebook formats.
@@ -45,6 +45,7 @@ struct BookSpine: View {
     let library: Library
 
     @Environment(CoverColors.self) private var coverColors
+    @Environment(\.colorSchemeContrast) private var contrast
 
     private var cover: Cover? { book.ebookCover ?? book.cover }
 
@@ -54,65 +55,87 @@ struct BookSpine: View {
         return ebooks.contains(where: \.isSupported) ? nil : ebooks.first?.format
     }
 
+    /// The first author's surname, set small at the foot as publishers do.
+    private var authorLine: String? {
+        book.authors.first.flatMap { $0.split(separator: " ").last.map(String.init) }?.uppercased()
+    }
+
     var body: some View {
         let wrapped = unopenable != nil
         let bound = wrapped
             ? (spine: Theme.kraft, lettering: SpineColor.ink)
             : (coverColors.color(of: cover) ?? spine.fallbackColor).shelved
         let lettering = Color(bound.lettering)
-        // Clear of the bands at the head and the pin at the foot.
-        let room = spine.height - 46
-        ZStack {
-            Color(bound.spine)
-            // Light falling across a rounded back.
-            LinearGradient(
-                stops: [
-                    .init(color: .black.opacity(0.42), location: 0),
-                    .init(color: .white.opacity(0.16), location: 0.28),
-                    .init(color: .white.opacity(0.04), location: 0.55),
-                    .init(color: .black.opacity(0.38), location: 1),
-                ],
-                startPoint: .leading, endPoint: .trailing
-            )
+        VStack(spacing: 0) {
             if !wrapped {
-                VStack {
-                    Bands(color: lettering)
-                    Spacer()
-                    Bands(color: lettering)
-                }
-                .padding(.top, 8)
-                .padding(.bottom, 16)
-                .padding(.horizontal, 3)
+                Bands(color: lettering).padding(.top, 8)
             }
-            // Laid out sideways, then turned to read top to bottom; the overlay keeps the turned
-            // text from widening the spine.
-            Color.clear
-                .frame(width: spine.thickness, height: room)
-                .overlay {
-                    Text(spine.title.uppercased())
-                        .font(Theme.stamped(spine.fontSize))
-                        .tracking(0.6)
-                        .lineLimit(1)
-                        .minimumScaleFactor(11 / spine.fontSize)
-                        .truncationMode(.tail)
-                        .foregroundStyle(lettering)
-                        .frame(width: room, height: spine.thickness)
-                        .rotationEffect(.degrees(90))
-                }
+            // On the spine's own solid color, which was chosen so the lettering reads on it.
+            Text(spine.title)
+                .font(Theme.stamped(spine.fontSize))
+                .foregroundStyle(lettering)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+                .truncationMode(.tail)
+                .minimumScaleFactor(Spine.fontSizes.lowerBound / spine.fontSize)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 6)
+                .background(Color(bound.spine))
+                .padding(.top, wrapped ? 12 : 6)
+            Spacer(minLength: 4)
+            if !wrapped, contrast != .increased {
+                // A small ornament from the theme of book cloth, like stamped spine art.
+                Image(systemName: "seal")
+                    .font(.system(size: 12))
+                    .foregroundStyle(lettering.opacity(0.55))
+            }
+            Spacer(minLength: 4)
+            if let authorLine, !wrapped {
+                Text(authorLine)
+                    .font(.system(size: 9, weight: .semibold, design: .serif))
+                    .tracking(0.8)
+                    .foregroundStyle(lettering)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .padding(.horizontal, 4)
+            }
+            foot
+                .frame(minHeight: 14)
+            if !wrapped {
+                Bands(color: lettering).padding(.bottom, 6)
+            }
         }
         .frame(width: spine.thickness, height: spine.height)
+        .background {
+            ZStack {
+                Color(bound.spine)
+                if contrast != .increased {
+                    // Light falling across a rounded back, kept clear of the title's panel.
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black.opacity(0.3), location: 0),
+                            .init(color: .white.opacity(0.1), location: 0.25),
+                            .init(color: .clear, location: 0.6),
+                            .init(color: .black.opacity(0.28), location: 1),
+                        ],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                }
+            }
+        }
         .clipShape(.rect(topLeadingRadius: 3, bottomLeadingRadius: 1, bottomTrailingRadius: 1, topTrailingRadius: 3))
-        .overlay(alignment: .bottom) { foot }
         .overlay(alignment: .top) {
             if throughBook != nil {
                 Ribbon()
                     .fill(Theme.ribbon)
-                    .frame(width: 6, height: 26)
-                    .offset(x: spine.thickness / 5, y: -14)
+                    .frame(width: 7, height: 24)
+                    .offset(x: spine.thickness / 3, y: -12)
             }
         }
-        .opacity(wrapped ? 0.85 : 1)
-        .shadow(color: .black.opacity(0.35), radius: 1.5, x: 2)
+        .opacity(wrapped ? 0.9 : 1)
+        // A short contact shadow where the Book stands on the ledge.
+        .shadow(color: .black.opacity(0.35), radius: 1.5, x: 2, y: 1)
         .task(id: cover) { await coverColors.load(cover, from: library) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)
@@ -149,9 +172,11 @@ struct BookSpine: View {
                     .padding(.bottom, 4)
             case .failed:
                 Image(systemName: "exclamationmark")
-                    .font(.system(size: 9, weight: .black))
-                    .foregroundStyle(Color(hex: 0xFF9A8A))
-                    .padding(.bottom, 4)
+                    .font(.system(size: 8, weight: .black))
+                    .foregroundStyle(.white)
+                    .frame(width: 13, height: 13)
+                    .background(Theme.ribbon, in: .circle)
+                    .padding(.bottom, 3)
             case .downloaded:
                 Circle()
                     .fill(RadialGradient(

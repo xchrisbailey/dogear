@@ -273,6 +273,8 @@ final class AppModel {
 struct RootView: View {
     let model: AppModel
     @Environment(\.scenePhase) private var scenePhase
+    /// Settings writes the same key, so a new theme shows at once, mid-listen or mid-search.
+    @AppStorage(AppearancePreferences.themeKey) private var storedTheme: String?
 
     var body: some View {
         Group {
@@ -285,6 +287,7 @@ struct RootView: View {
             }
         }
         .environment(model)
+        .appTheme(AppTheme(stored: storedTheme))
         .task { await model.observeSession() }
         .task { await model.observeOutbox() }
         .task { await model.observeDownloads() }

@@ -1,408 +1,490 @@
 import DogearCore
 import SwiftUI
 
-/// The pocket tape player skin: cream plastic, the Book loaded as a cassette behind a tinted
-/// door, a mechanical counter and chunky piano keys.
+/// The Pocket Player: the Book's title, a portable tape player with the Book loaded as a
+/// cassette, and under it the one set of controls. The player is an illustration only, so
+/// nothing that looks pressable on it is there to press.
 struct PocketPlayer: View {
     let model: AudiobookPlayerModel
-    let controls: PlayerControls
+    /// Closes the player and leaves the tape running.
+    let close: () -> Void
+    /// Opens the Chapters, or the Tracks of a folder audiobook.
+    let showContents: () -> Void
 
-    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppModel.self) private var app
+    @Environment(\.palette) private var palette
+    @Environment(\.dynamicTypeSize) private var typeSize
+    /// Where a drag on the scrubber has got to, shown until it's let go.
     @State private var scrubbing: Double?
-    /// How much the cassette shrinks to fit a narrow door.
-    @State private var cassetteScale: CGFloat = 1
-    /// The counter's wheels grow with the digits on them.
-    @ScaledMetric(relativeTo: .title2) private var wheelWidth: CGFloat = 20
-    @ScaledMetric(relativeTo: .title2) private var wheelHeight: CGFloat = 30
-    @ScaledMetric(relativeTo: .title2) private var colonWidth: CGFloat = 8
-
-    /// Under the whole player, filling the screen.
-    static var background: some View {
-        LinearGradient(colors: [Deck.bodyLight, Deck.bodyDark], startPoint: .top, endPoint: .bottom)
-    }
 
     var body: some View {
-        switch model.state {
-        case .opening:
-            VStack(spacing: 14) {
-                topBar
-                door { ProgressView("Opening…").tint(.white).foregroundStyle(.white) }
-            }
-        case let .failed(message):
-            VStack(spacing: 14) {
-                topBar
-                door { EmptyView() }
-                ContentUnavailableView("Can't play this audiobook", systemImage: "exclamationmark.triangle", description: Text(message))
-            }
-        case .ready:
-            if sizeClass == .regular {
-                // Cassette beside the controls, using the iPad's width.
-                VStack(spacing: 14) {
+        GeometryReader { proxy in
+            // Side by side in a short, wide window, with the title and artwork together.
+            let twoColumns = proxy.size.width >= 560 && proxy.size.height < proxy.size.width
+            let art = min(twoColumns ? 400 : proxy.size.width >= 560 ? 400 : 360, proxy.size.width - 32, max(proxy.size.height * 0.34, 160) * PocketDrawing.ratio)
+            ScrollView {
+                VStack(spacing: 0) {
                     topBar
-                    HStack(alignment: .top, spacing: 32) {
-                        VStack(spacing: 14) {
-                            door { cassette }
-                            chapterStrip
-                            problemNote
-                            counter
+                    if twoColumns {
+                        HStack(alignment: .center, spacing: 32) {
+                            VStack(spacing: 16) {
+                                metadata
+                                pocket(width: min(art, (proxy.size.width - 64) / 2))
+                            }
+                            .frame(maxWidth: .infinity)
+                            functional
+                                .frame(maxWidth: .infinity)
                         }
-                        .frame(maxWidth: 440)
-                        VStack(spacing: 14) {
-                            scrubber
-                            transport
-                            speedSlider
-                            outputs
-                        }
-                        .frame(maxWidth: 440)
+                        .padding(.top, 12)
+                    } else {
+                        metadata
+                            .padding(.top, 12)
+                        pocket(width: art)
+                            .padding(.top, 16)
+                        functional
+                            .padding(.top, 16)
                     }
                 }
-                .frame(maxWidth: .infinity)
-            } else {
-                VStack(spacing: 14) {
-                    topBar
-                    door { cassette }
-                    chapterStrip
-                    problemNote
-                    counter
-                    scrubber
-                    transport
-                    speedSlider
-                    outputs
-                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+                .frame(maxWidth: twoColumns ? 1040 : 560)
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
             }
+            // Pulled down past the top, the player closes like a sheet, and the tape plays on.
+            .modifier(PullsDownToClose(close: close))
         }
     }
 
     private var elapsed: Double { scrubbing ?? model.currentTime.seconds }
-    private var duration: Double { model.bookSeconds }
 
-    /// Close leaves the tape running under the library; Eject stops it. Chapters opens the
-    /// cassette's insert.
+    /// Close on the leading side; the audio route and the overflow, which holds Eject, trailing.
     private var topBar: some View {
-        HStack(spacing: 8) {
-            Button("Close", systemImage: "chevron.down", action: controls.close)
+        HStack(spacing: 4) {
+            Button("Close", systemImage: "chevron.down", action: close)
                 .labelStyle(.iconOnly)
-                .buttonStyle(CapStyle())
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(palette.text)
+                .frame(width: 44, height: 44)
+                .contentShape(.rect)
                 .accessibilityHint("Keeps playing")
-            Button("Eject", systemImage: "eject.fill") { Task { await app.eject() } }
-                .buttonStyle(CapStyle())
-                .accessibilityHint("Stops playing and closes the player")
             Spacer()
-            Text("DOGEAR")
-                .font(.system(size: 16, weight: .bold).width(.condensed))
-                .tracking(5)
-                .foregroundStyle(Deck.print)
-                .lineLimit(1)
-                .fixedSize()
-                .accessibilityHidden(true)
-            Spacer()
-            Button(model.contentsName, systemImage: model.contentsIcon, action: controls.showContents)
-                .buttonStyle(CapStyle())
-                .disabled(!model.hasContents)
-        }
-    }
-
-    /// The tinted window the cassette sits behind.
-    private func door(@ViewBuilder _ loaded: () -> some View) -> some View {
-        LinearGradient(colors: [Color(hex: 0x2A2C30), Color(hex: 0x0E0F11)], startPoint: .topLeading, endPoint: .bottomTrailing)
-            .frame(height: 220)
-            .overlay { loaded() }
-            .clipShape(.rect(cornerRadius: 14))
-            .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(Deck.trim, lineWidth: 3) }
-            .onGeometryChange(for: CGFloat.self, of: \.size.width) { width in
-                cassetteScale = min(1, (width - 28) / LoadedCassette.size.width)
+            RoutePicker(tint: UIColor(palette.text), activeTint: UIColor(palette.canvasAction))
+                .frame(width: 44, height: 44)
+            Menu {
+                Button("Eject", systemImage: "eject") { Task { await app.eject() } }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(palette.text)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
             }
+            .accessibilityLabel("More")
+        }
+        .frame(minHeight: 44)
     }
 
-    private var cassette: some View {
-        LoadedCassette(
-            title: model.title, author: model.author,
-            stripe: controls.stripe,
-            throughBook: elapsed / duration, isPlaying: model.isPlaying, speed: Double(model.speed)
+    private var metadata: some View {
+        VStack(spacing: 4) {
+            Text(model.title)
+                .serifTitle(28, relativeTo: .title)
+                .foregroundStyle(palette.text)
+                .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                .accessibilityAddTraits(.isHeader)
+            if let author = model.author {
+                Text(author)
+                    .font(.system(.body, design: .serif).italic())
+                    .foregroundStyle(palette.textSecondary)
+            }
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func pocket(width: CGFloat) -> some View {
+        PocketDrawing(
+            title: model.title,
+            throughBook: model.knownSeconds.map { elapsed / $0 } ?? 0,
+            isPlaying: model.isPlaying, speed: Double(model.speed)
         )
-        .scaleEffect(cassetteScale)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel([model.title, model.author].compactMap { $0 }.joined(separator: ", "))
+        .frame(width: max(width, 160), height: max(width, 160) / PocketDrawing.ratio)
+        // The title and author are read above; the player is decoration.
+        .accessibilityHidden(true)
     }
 
-    /// The Chapter or Track playing, on embossed label tape.
-    private var chapterStrip: some View {
-        Text((model.placeName ?? " ").uppercased())
-            .font(.system(.subheadline, weight: .bold).width(.condensed))
-            .tracking(2)
-            .lineLimit(1)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .background(LinearGradient(colors: [Color(hex: 0x2A2A2C), Color(hex: 0x111111)], startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 3))
-            .rotationEffect(.degrees(-0.6))
+    /// What can be read and done: the place, the scrubber, transport and utilities, or why the
+    /// audiobook won't play.
+    @ViewBuilder private var functional: some View {
+        switch model.state {
+        case .opening:
+            ProgressView("Opening…")
+                .tint(palette.text)
+                .foregroundStyle(palette.textSecondary)
+                .padding(.vertical, 32)
+        case let .failed(message):
+            VStack(spacing: 12) {
+                ContentUnavailableView("Can't play this audiobook", systemImage: "exclamationmark.triangle", description: Text(message))
+                Button("Close", action: close)
+                    .buttonStyle(OutlinedActionStyle(fillsWidth: false))
+            }
+        case .ready:
+            VStack(spacing: 0) {
+                if let place = model.placeName {
+                    Text(place)
+                        .font(.system(.title3, design: .serif))
+                        .foregroundStyle(palette.text)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                        .padding(.bottom, 8)
+                }
+                problemNote
+                scrubber
+                times
+                    .padding(.top, 2)
+                transport
+                    .padding(.top, 16)
+                utilities
+                    .padding(.top, 16)
+            }
+        }
     }
 
     @ViewBuilder private var problemNote: some View {
         if let problem = model.problem {
-            Label(problem, systemImage: "exclamationmark.triangle")
-                .font(Theme.label(.subheadline))
-                .foregroundStyle(Theme.ink)
-                .padding(10)
-                .frame(maxWidth: .infinity)
-                .background(Color(hex: 0xFFE98A), in: .rect(cornerRadius: 2))
-                .rotationEffect(.degrees(0.8))
+            PaperTag(edge: Theme.ribbon) {
+                Label(problem, systemImage: "exclamationmark.triangle")
+                    .font(Theme.label(.subheadline))
+                    .foregroundStyle(palette.ink)
+            }
+            .padding(.bottom, 12)
         }
     }
 
-    /// Whole-book time on a mechanical counter, with what's left of the tape beside it, or
-    /// under it when large text leaves no room beside.
-    private var counter: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .bottom) {
-                elapsedCounter
-                Spacer()
-                remainingCounter
-            }
-            VStack(alignment: .leading, spacing: 10) {
-                elapsedCounter
-                remainingCounter
-            }
-        }
-    }
-
-    private var elapsedCounter: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            DeckLabel("Tape counter")
-            HStack(spacing: 2) {
-                ForEach(Array(AudiobookPlayerView.wheels(elapsed).enumerated()), id: \.offset) { _, character in
-                    Text(String(character))
-                        .font(.system(.title2, design: .monospaced, weight: .medium))
-                        .foregroundStyle(Color(hex: 0xF4F1E8))
-                        .frame(width: character == ":" ? colonWidth : wheelWidth, height: wheelHeight)
-                        .background(character == ":" ? Color.clear : Color(hex: 0x161616), in: .rect(cornerRadius: 2))
+    /// Whole-book time: a drag previews the place and lets go to move there. VoiceOver adjusts
+    /// it a skip at a time. Unknown until the length is.
+    private var scrubber: some View {
+        let total = model.knownSeconds
+        let fraction = total.map { min(max(elapsed / $0, 0), 1) } ?? 0
+        return GeometryReader { proxy in
+            let width = proxy.size.width
+            ZStack(alignment: .leading) {
+                Capsule().fill(palette.boundary).frame(height: 4)
+                Capsule().fill(palette.accent).frame(width: width * fraction, height: 4)
+                if total != nil {
+                    Circle()
+                        .fill(palette.raised)
+                        .overlay { Circle().strokeBorder(palette.accent, lineWidth: 2) }
+                        .frame(width: 18, height: 18)
+                        .shadow(color: .black.opacity(0.2), radius: 2, y: 1)
+                        .offset(x: width * fraction - 9)
                 }
             }
-            .padding(4)
-            .background(.black, in: .rect(cornerRadius: 4))
+            .frame(maxHeight: .infinity)
+            .contentShape(.rect)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        guard let total, width > 0 else { return }
+                        scrubbing = min(max(drag.location.x / width, 0), 1) * total
+                    }
+                    .onEnded { _ in
+                        if let scrubbing { model.seek(to: .seconds(scrubbing)) }
+                        scrubbing = nil
+                    }
+            )
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Elapsed \(AudiobookPlayerView.format(elapsed))")
-    }
-
-    private var remainingCounter: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            DeckLabel("Tape left")
-            Text("-" + AudiobookPlayerView.wheels(max(0, duration - elapsed)))
-                .font(.system(.title2, design: .monospaced, weight: .medium))
-                .foregroundStyle(Deck.print)
-                .frame(minHeight: wheelHeight + 8)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Remaining \(AudiobookPlayerView.format(max(0, duration - elapsed)))")
-    }
-
-    /// Whole-book time; Chapters are in the list.
-    private var scrubber: some View {
-        Slider(
-            value: Binding { elapsed } set: { scrubbing = $0 },
-            in: 0 ... duration
-        ) { editing in
-            if !editing, let scrubbing {
-                model.seek(to: .seconds(scrubbing))
-                self.scrubbing = nil
+        .frame(height: 44)
+        .disabled(total == nil)
+        .accessibilityElement()
+        .accessibilityLabel("Position")
+        .accessibilityValue(total.map { "\(AudiobookPlayerView.format(elapsed)) of \(AudiobookPlayerView.format($0))" } ?? "Unknown")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: model.skip(by: model.skipForward)
+            case .decrement: model.skip(by: .zero - model.skipBack)
+            @unknown default: break
             }
         }
-        .accessibilityLabel("Position")
-        .accessibilityValue(AudiobookPlayerView.format(elapsed))
+    }
+
+    /// Elapsed and remaining, both of the whole Book file, like the scrubber.
+    private var times: some View {
+        HStack {
+            Text(model.knownSeconds == nil ? "—" : AudiobookPlayerView.format(elapsed))
+            Spacer()
+            Text(model.knownSeconds.map { "-" + AudiobookPlayerView.format(max(0, $0 - elapsed)) } ?? "—")
+        }
+        .font(.footnote)
+        .monospacedDigit()
+        .foregroundStyle(palette.textSecondary)
+        .accessibilityHidden(true)
     }
 
     private var transport: some View {
-        HStack(spacing: 8) {
-            Button {
-                model.skip(by: .zero - model.skipBack)
-            } label: {
-                KeyLabel(systemImage: "backward.fill", text: "\(Int(model.skipBack.seconds)) SEC")
-            }
-            .buttonStyle(KeyStyle())
-            .accessibilityLabel("Back \(Int(model.skipBack.seconds)) seconds")
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            skipButton(back: true)
+            Spacer(minLength: 16)
             Button {
                 model.togglePlayback()
             } label: {
-                KeyLabel(systemImage: model.isPlaying ? "pause.fill" : "play.fill", text: model.isPlaying ? "PAUSE" : "PLAY")
+                ZStack {
+                    Circle().fill(palette.accent)
+                    if model.isBuffering {
+                        ProgressView().tint(palette.onAccent)
+                    } else {
+                        Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 28, weight: .semibold))
+                            .foregroundStyle(palette.onAccent)
+                            // Optically centred: a play triangle sits left of its box.
+                            .offset(x: model.isPlaying ? 0 : 2)
+                    }
+                }
+                .frame(width: 68, height: 68)
+                .contentShape(.circle)
             }
-            // A tape player's play key stays down while the tape runs.
-            .buttonStyle(KeyStyle(isMain: true, isDown: model.isPlaying))
+            .buttonStyle(PressStyle())
             .accessibilityLabel(model.isPlaying ? "Pause" : "Play")
-            Button {
-                model.skip(by: model.skipForward)
-            } label: {
-                KeyLabel(systemImage: "forward.fill", text: "\(Int(model.skipForward.seconds)) SEC")
-            }
-            .buttonStyle(KeyStyle())
-            .accessibilityLabel("Forward \(Int(model.skipForward.seconds)) seconds")
+            .accessibilityValue(model.isBuffering ? "Loading" : "")
+            .sensoryFeedback(.impact, trigger: model.isPlaying)
+            Spacer(minLength: 16)
+            skipButton(back: false)
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 10)
-        .padding(.bottom, 16)
-        .background(LinearGradient(colors: [Color(hex: 0xA9A190), Color(hex: 0x8C8473)], startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 10))
-        .sensoryFeedback(.impact, trigger: model.isPlaying)
+        .frame(maxWidth: 320)
     }
 
-    /// One detent for each speed; the knob sits on the one in use.
-    private var speedSlider: some View {
-        VStack(spacing: 2) {
-            HStack {
-                DeckLabel("Speed")
-                Spacer()
-                DeckLabel(AudiobookPlayerView.format(speed: model.speed))
-            }
-            HStack(spacing: 0) {
+    private func skipButton(back: Bool) -> some View {
+        let interval = back ? model.skipBack : model.skipForward
+        let seconds = Int(interval.seconds)
+        return Button {
+            model.skip(by: back ? .zero - interval : interval)
+        } label: {
+            Image(systemName: Self.skipSymbol(back: back, seconds: seconds))
+                .font(.system(size: 30, weight: .regular))
+                .foregroundStyle(palette.text)
+                .frame(width: 48, height: 48)
+                .contentShape(.rect)
+        }
+        .buttonStyle(PressStyle())
+        .accessibilityLabel(back ? "Back \(seconds) seconds" : "Forward \(seconds) seconds")
+    }
+
+    /// The numbered arrow for every skip Settings offers; a plain one for anything else.
+    private static func skipSymbol(back: Bool, seconds: Int) -> String {
+        let base = back ? "gobackward" : "goforward"
+        return [10, 15, 30, 45, 60].contains(seconds) ? "\(base).\(seconds)" : base
+    }
+
+    /// Speed, the sleep timer and the contents, as labelled outlines, wrapping when narrow.
+    private var utilities: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { utilityItems }
+            VStack(spacing: 8) { utilityItems }
+        }
+    }
+
+    @ViewBuilder private var utilityItems: some View {
+        Menu {
+            Picker("Speed", selection: Binding { model.speed } set: { model.setSpeed($0) }) {
                 ForEach(ListeningSettings.speeds, id: \.self) { speed in
-                    Button {
-                        model.setSpeed(speed)
-                    } label: {
-                        VStack(spacing: 2) {
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(LinearGradient(colors: [Deck.orangeDark, Deck.orange, Deck.orangeDark], startPoint: .leading, endPoint: .trailing))
-                                .frame(width: 18, height: 26)
-                                .shadow(color: .black.opacity(0.45), radius: 2, y: 2)
-                                .opacity(speed == model.speed ? 1 : 0)
-                            Text(speed.formatted(.number.precision(.fractionLength(0 ... 2))))
-                                .font(.system(.caption2, weight: .bold).width(.condensed))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.6)
-                                .foregroundStyle(Deck.print)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Speed \(AudiobookPlayerView.format(speed: speed))")
-                    .accessibilityAddTraits(speed == model.speed ? .isSelected : [])
+                    Text(AudiobookPlayerView.format(speed: speed)).tag(speed)
                 }
             }
-            .background(alignment: .top) {
-                // The slot the knob slides in.
-                Capsule().fill(Color(hex: 0x17120E)).frame(height: 6).padding(.horizontal, 16).padding(.top, 12)
-            }
-            .sensoryFeedback(.selection, trigger: model.speed)
+        } label: {
+            UtilityLabel(text: AudiobookPlayerView.format(speed: model.speed), systemImage: nil)
         }
-    }
-
-    private var outputs: some View {
-        HStack {
-            HStack(spacing: 8) {
-                RoutePicker()
-                    .frame(width: 44, height: 44)
-                    .background(Color(hex: 0x3A3A3D), in: .circle)
-                DeckLabel("Output")
-            }
-            Spacer()
-            sleepMenu
-        }
-    }
-
-    private var sleepMenu: some View {
+        .accessibilityLabel("Speed, \(AudiobookPlayerView.format(speed: model.speed))")
         Menu {
             SleepTimerChoices(model: model)
         } label: {
-            HStack(spacing: 8) {
-                VStack(alignment: .trailing, spacing: 2) {
-                    DeckLabel("Sleep timer")
-                    Text(model.sleepLabel)
-                        .font(.system(.subheadline, weight: .bold).width(.condensed))
-                        .monospacedDigit()
-                        .foregroundStyle(Deck.print)
-                }
-                // A dial whose pointer leaves "off" once a timer is set.
-                Circle()
-                    .fill(Color(hex: 0x2A2A2C))
-                    .frame(width: 44, height: 44)
-                    .overlay(alignment: .top) {
-                        Capsule().fill(Deck.orange).frame(width: 4, height: 13).padding(.top, 4)
-                    }
-                    .rotationEffect(.degrees(model.sleepTimer == nil ? -120 : 30))
-                    .shadow(color: .black.opacity(0.45), radius: 3, y: 3)
-            }
+            UtilityLabel(text: model.sleepTimer == nil ? "Sleep timer" : model.sleepLabel, systemImage: "moon", isActive: model.sleepTimer != nil)
         }
         .accessibilityLabel(model.sleepTimer == nil ? "Sleep timer" : "Sleep timer, \(model.sleepLabel)")
+        if model.hasContents {
+            Button(action: showContents) {
+                UtilityLabel(text: model.contentsName, systemImage: model.contentsIcon)
+            }
+            .buttonStyle(.plain)
+        }
     }
 }
 
-/// The pocket player's plastic, print and keys. The now-playing strip uses it too.
-enum Deck {
-    static let bodyLight = Color(hex: 0xEFE9D8)
-    static let bodyDark = Color(hex: 0xD9D1BC)
-    static let trim = Color(hex: 0xBDB5A0)
-    /// Text printed on the body.
-    static let print = Color(hex: 0x2B2620)
-    static let orange = Color(hex: 0xE2571C)
-    static let orangeDark = Color(hex: 0xB03D0C)
-}
-
-/// Small print naming a control.
-private struct DeckLabel: View {
+/// A utility's label: an outline in the strong control boundary, lettered like the canvas.
+private struct UtilityLabel: View {
     let text: String
+    let systemImage: String?
+    var isActive = false
 
-    init(_ text: String) {
-        self.text = text
-    }
+    @Environment(\.palette) private var palette
 
     var body: some View {
-        Text(text.uppercased())
-            .font(.system(.caption2, weight: .bold).width(.condensed))
-            .tracking(1.5)
-            .foregroundStyle(Deck.print.opacity(0.85))
+        HStack(spacing: 6) {
+            if let systemImage {
+                Image(systemName: isActive ? systemImage + ".fill" : systemImage)
+            }
+            Text(text)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(palette.text)
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .background {
+            Capsule().fill(isActive ? palette.accent.opacity(0.16) : .clear)
+            Capsule().strokeBorder(palette.boundary, lineWidth: 1)
+        }
+        .contentShape(.capsule)
     }
 }
 
-/// A small dark button on the top edge.
-private struct CapStyle: ButtonStyle {
+/// Dims a control while it's held.
+private struct PressStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(.caption, weight: .bold).width(.condensed))
-            .textCase(.uppercase)
-            .foregroundStyle(Color(hex: 0xF1ECE0))
-            .padding(.horizontal, 12)
-            .frame(minHeight: 44)
-            .background(LinearGradient(colors: [Color(hex: 0x3A3A3D), Color(hex: 0x1D1D1F)], startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: 8))
-            .opacity(isEnabled ? 1 : 0.4)
-            .offset(y: configuration.isPressed ? 2 : 0)
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .opacity(!isEnabled ? 0.4 : configuration.isPressed ? 0.75 : 1)
+            .animation(.snappy(duration: 0.12), value: configuration.isPressed)
     }
 }
 
-private struct KeyLabel: View {
-    let systemImage: String
-    let text: String
+/// The portable tape player: a rounded shell in the theme's plastic with its strap, a dark
+/// window onto the loaded cassette, whose label carries the Book's title, and a speaker grille.
+/// Its hubs turn while the tape plays, unless Reduce Motion is on.
+struct PocketDrawing: View {
+    /// Width over height, strap included.
+    static let ratio: CGFloat = 1.3
+
+    let title: String
+    /// 0…1.
+    let throughBook: Double
+    let isPlaying: Bool
+    let speed: Double
+
+    @Environment(\.palette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: systemImage).font(.title2)
-            Text(text).font(.system(.caption2, weight: .bold).width(.condensed)).tracking(1.5)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+        GeometryReader { proxy in
+            let w = proxy.size.width
+            let h = proxy.size.height
+            let strap = h * 0.13
+            let shellHeight = h - strap
+            ZStack(alignment: .top) {
+                // The strap, behind the shell.
+                UnevenRoundedRectangle(topLeadingRadius: strap * 1.6, topTrailingRadius: strap * 1.6)
+                    .stroke(palette.shellTrim, lineWidth: max(w * 0.018, 4))
+                    .frame(width: w * 0.5, height: strap * 2.2)
+                    .padding(.top, max(w * 0.009, 2))
+                shell(width: w, height: shellHeight)
+                    .padding(.top, strap)
+            }
+            .frame(width: w, height: h)
         }
     }
-}
 
-/// A chunky piano key. The main key is orange and can stay down.
-private struct KeyStyle: ButtonStyle {
-    var isMain = false
-    var isDown = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        let down = isDown || configuration.isPressed
-        let face = isMain ? [Color(hex: 0xF0692B), Color(hex: 0xC9460F)] : [Color(hex: 0xF7F3E8), Color(hex: 0xCFC7B3)]
-        let edge = isMain ? Color(hex: 0x7A2A08) : Color(hex: 0x8C8473)
-        configuration.label
-            .foregroundStyle(isMain ? .white : Deck.print)
-            .frame(maxWidth: .infinity, minHeight: 84)
-            .background {
-                UnevenRoundedRectangle(topLeadingRadius: 6, bottomLeadingRadius: 10, bottomTrailingRadius: 10, topTrailingRadius: 6)
-                    .fill(LinearGradient(colors: face, startPoint: .top, endPoint: .bottom))
-                    // The key's front edge, which disappears as it goes down.
-                    .shadow(color: edge, radius: 0, y: down ? 1 : 6)
+    private func shell(width w: CGFloat, height h: CGFloat) -> some View {
+        let radius = w * 0.07
+        let window = CGSize(width: w * 0.8, height: h * 0.56)
+        return ZStack(alignment: .top) {
+            RoundedRectangle(cornerRadius: radius)
+                .fill(LinearGradient(colors: [palette.shell.mix(with: .white, by: 0.25), palette.shell], startPoint: .top, endPoint: .bottom))
+                // The edge catching the light.
+                .overlay { RoundedRectangle(cornerRadius: radius).strokeBorder(.white.opacity(0.6), lineWidth: 1.5).padding(1) }
+                .overlay { RoundedRectangle(cornerRadius: radius).strokeBorder(palette.shellTrim.opacity(0.35), lineWidth: 1) }
+                .shadow(color: .black.opacity(0.22), radius: 8, y: 6)
+            HStack(alignment: .firstTextBaseline) {
+                Text("DOGEAR")
+                    .font(.system(size: max(w * 0.036, 9), weight: .semibold, design: .serif))
+                    .tracking(2)
+                Spacer()
+                Text("PORTABLE CASSETTE PLAYER")
+                    .font(.system(size: max(w * 0.022, 6), weight: .medium))
+                    .tracking(0.6)
             }
-            .offset(y: down ? 5 : 0)
-            .animation(.snappy(duration: 0.12), value: down)
+            .foregroundStyle(palette.shellTrim)
+            .padding(.horizontal, w * 0.1)
+            .padding(.top, h * 0.06)
+            cassetteWindow(window)
+                .padding(.top, h * 0.15)
+            grille(width: w * 0.2, height: h * 0.14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, w * 0.1)
+                .padding(.top, h * 0.15 + window.height + h * 0.05)
+        }
+        .frame(width: w, height: h)
+    }
+
+    /// The dark window, the cassette's paper label and its two reels.
+    private func cassetteWindow(_ size: CGSize) -> some View {
+        let reelBox = size.height * 0.36
+        let reels = TapeReels(throughBook: throughBook, hub: reelBox * 0.2, full: reelBox * 0.5)
+        return VStack(spacing: size.height * 0.05) {
+            Text(title)
+                .font(.system(size: max(size.width * 0.07, 13), weight: .semibold, design: .serif).italic())
+                .foregroundStyle(palette.ink)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, minHeight: size.height * 0.34)
+                .background(palette.raised, in: .rect(cornerRadius: 3))
+                .overlay(alignment: .bottom) { palette.accent.opacity(0.7).frame(height: 1).padding(.horizontal, 14).padding(.bottom, 5) }
+            TimelineView(.animation(paused: !isPlaying || reduceMotion)) { timeline in
+                // One turn every 2.4 s at 1×, faster with the speed.
+                let angle = Angle.degrees(timeline.date.timeIntervalSinceReferenceDate * 150 * speed)
+                HStack {
+                    reel(tape: reels.supply, box: reelBox, angle: angle)
+                    Spacer(minLength: 0)
+                    reel(tape: reels.takeUp, box: reelBox, angle: angle)
+                }
+                .padding(.horizontal, size.width * 0.14)
+            }
+            .frame(height: reelBox)
+        }
+        .padding(size.width * 0.05)
+        .frame(width: size.width, height: size.height, alignment: .top)
+        .background(LinearGradient(colors: Theme.window, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: size.width * 0.05))
+        .overlay {
+            RoundedRectangle(cornerRadius: size.width * 0.05)
+                .strokeBorder(palette.shellTrim.opacity(0.8), lineWidth: 3)
+        }
+        .overlay(alignment: .top) {
+            if contrast != .increased {
+                // Glare across the window's glass.
+                LinearGradient(colors: [.white.opacity(0.1), .clear], startPoint: .top, endPoint: .center)
+                    .clipShape(.rect(cornerRadius: size.width * 0.05))
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private func reel(tape radius: Double, box: CGFloat, angle: Angle) -> some View {
+        ZStack {
+            Circle().fill(Theme.tape).frame(width: radius * 2, height: radius * 2)
+            Circle().fill(Color(hex: 0xEDE6D8)).frame(width: box * 0.42, height: box * 0.42)
+            ForEach(0 ..< 3, id: \.self) { tooth in
+                Capsule()
+                    .fill(Color(hex: 0x2A1A10))
+                    .frame(width: max(box * 0.05, 2), height: box * 0.32)
+                    .rotationEffect(.degrees(Double(tooth) * 60))
+            }
+            .rotationEffect(-angle)
+        }
+        .frame(width: box, height: box)
+    }
+
+    private func grille(width: CGFloat, height: CGFloat) -> some View {
+        VStack(spacing: height * 0.12) {
+            ForEach(0 ..< 5, id: \.self) { _ in
+                Capsule().fill(palette.shellTrim.opacity(0.45)).frame(height: max(height * 0.08, 1.5))
+            }
+        }
+        .frame(width: width, height: height)
     }
 }

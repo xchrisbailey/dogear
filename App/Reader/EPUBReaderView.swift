@@ -22,7 +22,7 @@ struct EPUBReaderView: View {
             content
             if showsBar {
                 VStack(spacing: 0) {
-                    LeatherBar(title: title) { dismiss() } actions: {
+                    ReaderBar(title: title) { dismiss() } actions: {
                         Button("Contents", systemImage: "list.bullet") { isShowingContents = true }
                             .disabled(model.tableOfContents.isEmpty)
                         Button("Reading Settings", systemImage: "textformat.size") { isShowingSettings = true }
@@ -65,8 +65,8 @@ struct EPUBReaderView: View {
         switch model.state {
         case .opening:
             ProgressView("Opening…")
-                .tint(Theme.foil)
-                .foregroundStyle(Theme.foil)
+                .tint(.white)
+                .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case let .failed(message):
             ContentUnavailableView("Can't open this Book", systemImage: "exclamationmark.triangle", description: Text(message))
