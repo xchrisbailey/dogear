@@ -32,7 +32,7 @@ enum ShelfDownload: Equatable {
     }
 }
 
-/// A Book standing on the shelf, spine out.
+/// A Book standing on the shelf, spine out, its title read across the spine near the top.
 ///
 /// A ribbon out of the top means it's being read, a knot of thread at the foot that it's downloaded,
 /// and brown paper that Dogear can't open any of its ebook formats.
@@ -45,6 +45,7 @@ struct BookSpine: View {
     let library: Library
 
     @Environment(CoverColors.self) private var coverColors
+    @Environment(\.colorSchemeContrast) private var contrast
 
     private var cover: Cover? { book.ebookCover ?? book.cover }
 
@@ -54,65 +55,109 @@ struct BookSpine: View {
         return ebooks.contains(where: \.isSupported) ? nil : ebooks.first?.format
     }
 
+    /// The first author's surname, set small at the foot as publishers do. Grimmory gives some
+    /// names surname first ("Dinniman, Matt").
+    private var authorLine: String? {
+        guard let author = book.authors.first?.trimmingCharacters(in: .whitespaces), !author.isEmpty else { return nil }
+        if let comma = author.firstIndex(of: ",") {
+            return String(author[..<comma]).trimmingCharacters(in: .whitespaces).uppercased()
+        }
+        return author.split(separator: " ").last.map(String.init)?.uppercased()
+    }
+
     var body: some View {
         let wrapped = unopenable != nil
         let bound = wrapped
             ? (spine: Theme.kraft, lettering: SpineColor.ink)
             : (coverColors.color(of: cover) ?? spine.fallbackColor).shelved
         let lettering = Color(bound.lettering)
-        // Clear of the bands at the head and the pin at the foot.
-        let room = spine.height - 46
-        ZStack {
-            Color(bound.spine)
-            // Light falling across a rounded back.
-            LinearGradient(
-                stops: [
-                    .init(color: .black.opacity(0.42), location: 0),
-                    .init(color: .white.opacity(0.16), location: 0.28),
-                    .init(color: .white.opacity(0.04), location: 0.55),
-                    .init(color: .black.opacity(0.38), location: 1),
-                ],
-                startPoint: .leading, endPoint: .trailing
-            )
+        let titleSize = SpineType.size(for: spine.title, preferred: spine.fontSize, width: spine.thickness - SpineType.sidePadding * 2)
+        VStack(spacing: 0) {
             if !wrapped {
-                VStack {
-                    Bands(color: lettering)
-                    Spacer()
-                    Bands(color: lettering)
-                }
-                .padding(.top, 8)
-                .padding(.bottom, 16)
-                .padding(.horizontal, 3)
+                Bands(color: lettering).padding(.top, 9)
             }
-            // Laid out sideways, then turned to read top to bottom; the overlay keeps the turned
-            // text from widening the spine.
-            Color.clear
-                .frame(width: spine.thickness, height: room)
-                .overlay {
-                    Text(spine.title.uppercased())
-                        .font(Theme.stamped(spine.fontSize))
-                        .tracking(0.6)
-                        .lineLimit(1)
-                        .minimumScaleFactor(11 / spine.fontSize)
-                        .truncationMode(.tail)
-                        .foregroundStyle(lettering)
-                        .frame(width: room, height: spine.thickness)
-                        .rotationEffect(.degrees(90))
-                }
+            Text(spine.title)
+                .font(SpineType.swiftUIFont(titleSize))
+                .foregroundStyle(lettering)
+                .multilineTextAlignment(.center)
+                .lineLimit(4)
+                .lineSpacing(-1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, SpineType.sidePadding)
+                .padding(.top, wrapped ? 16 : 18)
+                .shadow(color: .black.opacity(bound.lettering == .foil ? 0.35 : 0), radius: 0, y: 1)
+            Spacer(minLength: 4)
+            if !wrapped, contrast != .increased {
+                // Line art stamped in the same foil or ink as the title.
+                FoilOrnament(seed: book.id, tint: bound.lettering == .foil ? nil : lettering.opacity(0.8))
+                    .frame(width: min(max(spine.thickness * 0.5, 24), 40), height: 36)
+            }
+            Spacer(minLength: 4)
+            if let authorLine, !wrapped {
+                Text(authorLine)
+                    .font(.system(size: 11, weight: .medium, design: .serif))
+                    .tracking(1)
+                    .foregroundStyle(lettering.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 4)
+            }
+            foot
+                .frame(minHeight: 12)
+            if !wrapped {
+                Bands(color: lettering).padding(.bottom, 7)
+            }
         }
         .frame(width: spine.thickness, height: spine.height)
-        .clipShape(.rect(topLeadingRadius: 3, bottomLeadingRadius: 1, bottomTrailingRadius: 1, topTrailingRadius: 3))
-        .overlay(alignment: .bottom) { foot }
+        .background(Color(bound.spine))
+        .overlay {
+            if contrast != .increased {
+                ZStack {
+                    // Cloth: a fine mottle, light and dark.
+                    Texture(name: "SpineLinen")
+                        .opacity(0.3)
+                        .blendMode(.softLight)
+                    // Light falling across a rounded back from the upper left.
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black.opacity(0.24), location: 0),
+                            .init(color: .white.opacity(0.04), location: 0.1),
+                            .init(color: .white.opacity(0.14), location: 0.3),
+                            .init(color: .clear, location: 0.62),
+                            .init(color: .black.opacity(0.1), location: 0.9),
+                            .init(color: .black.opacity(0.28), location: 1),
+                        ],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                    LinearGradient(colors: [.white.opacity(0.1), .clear, .black.opacity(0.1)], startPoint: .top, endPoint: .bottom)
+                }
+                .allowsHitTesting(false)
+            }
+        }
+        // The headcap catching the light.
+        .overlay(alignment: .top) { Color.white.opacity(0.18).frame(height: 1) }
+        .clipShape(.rect(topLeadingRadius: 6, bottomLeadingRadius: 2, bottomTrailingRadius: 2, topTrailingRadius: 6))
         .overlay(alignment: .top) {
             if throughBook != nil {
                 Ribbon()
-                    .fill(Theme.ribbon)
-                    .frame(width: 6, height: 26)
-                    .offset(x: spine.thickness / 5, y: -14)
+                    .fill(LinearGradient(colors: [Theme.ribbonDark, Theme.ribbon, Theme.ribbonDark], startPoint: .leading, endPoint: .trailing))
+                    .frame(width: 7, height: 26)
+                    .shadow(color: .black.opacity(0.3), radius: 1, y: 1)
+                    .offset(x: spine.thickness / 4, y: -14)
             }
         }
-        .opacity(wrapped ? 0.85 : 1)
-        .shadow(color: .black.opacity(0.35), radius: 1.5, x: 2)
+        .opacity(wrapped ? 0.92 : 1)
+        // A short contact shadow where the Book stands on the ledge, and its shade on the back panel.
+        .background(alignment: .bottom) {
+            Ellipse()
+                .fill(.black.opacity(0.55))
+                .frame(width: spine.thickness * 1.05, height: 6)
+                .blur(radius: 2.5)
+                .offset(y: 2)
+        }
+        .shadow(color: .black.opacity(0.32), radius: 3, x: 2, y: 0)
         .task(id: cover) { await coverColors.load(cover, from: library) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)
@@ -149,9 +194,11 @@ struct BookSpine: View {
                     .padding(.bottom, 4)
             case .failed:
                 Image(systemName: "exclamationmark")
-                    .font(.system(size: 9, weight: .black))
-                    .foregroundStyle(Color(hex: 0xFF9A8A))
-                    .padding(.bottom, 4)
+                    .font(.system(size: 8, weight: .black))
+                    .foregroundStyle(.white)
+                    .frame(width: 13, height: 13)
+                    .background(Theme.ribbon, in: .circle)
+                    .padding(.bottom, 3)
             case .downloaded:
                 Circle()
                     .fill(RadialGradient(
@@ -185,16 +232,55 @@ enum BookFormats {
     }
 }
 
-/// A pair of gilt rules across a spine.
+/// A pair of gilt rules across a spine, a heavy one and a fine one.
 private struct Bands: View {
     let color: Color
 
     var body: some View {
         VStack(spacing: 2) {
-            color.frame(height: 1)
-            color.frame(height: 1)
+            color.frame(height: 1.5)
+            color.frame(height: 0.75)
         }
-        .opacity(0.8)
+        .padding(.horizontal, 2)
+        .opacity(0.85)
+    }
+}
+
+/// The spine's lettering: a serif title fitted so no word breaks across lines, and the stamped
+/// art under it.
+enum SpineType {
+    /// Inside each edge of the spine, clear of its rounded shading.
+    static let sidePadding: CGFloat = 6
+    /// Below this a long word ellipsizes instead of shrinking further.
+    static let minimumSize: CGFloat = 12
+
+    static func swiftUIFont(_ size: CGFloat) -> Font { .system(size: size, weight: .medium, design: .serif) }
+
+    private static func uiFont(_ size: CGFloat) -> UIFont {
+        let system = UIFont.systemFont(ofSize: size, weight: .medium)
+        return UIFont(descriptor: system.fontDescriptor.withDesign(.serif) ?? system.fontDescriptor, size: size)
+    }
+
+    /// How wide the title's longest word is at `size`.
+    static func longestWord(in title: String, size: CGFloat) -> CGFloat {
+        let font = uiFont(size)
+        return title.split(whereSeparator: \.isWhitespace)
+            .map { (String($0) as NSString).size(withAttributes: [.font: font]).width.rounded(.up) }
+            .max() ?? 0
+    }
+
+    /// The width a spine needs for its longest word at the smallest standard size.
+    static func neededThickness(for title: String) -> CGFloat {
+        longestWord(in: title, size: CGFloat(Spine.fontSizes.lowerBound)) + sidePadding * 2 + 2
+    }
+
+    /// The biggest size up to `preferred` at which every word fits across `width`.
+    static func size(for title: String, preferred: Double, width: CGFloat) -> CGFloat {
+        var size = CGFloat(preferred)
+        while size > minimumSize, longestWord(in: title, size: size) > width {
+            size -= 0.5
+        }
+        return size
     }
 }
 

@@ -9,6 +9,31 @@ public struct ContinueRows: Sendable, Equatable {
         self.reading = reading
         self.listening = listening
     }
+
+    /// The one Continue shelf the Library shows for a format filter: reading for Books,
+    /// listening for Audio, and for All both merged by most recent activity, each Book file once.
+    public func entries(showing kind: BookKind) -> [ContinueEntry] {
+        switch kind {
+        case .ebooks: return reading
+        case .audiobooks: return listening
+        case .all:
+            var seen = Set<Int>()
+            // Stable on ties: reading before listening, each in its own order.
+            return (reading + listening).enumerated()
+                .sorted { ($0.element.lastRead, $1.offset) > ($1.element.lastRead, $0.offset) }
+                .map(\.element)
+                .filter { seen.insert($0.id).inserted }
+        }
+    }
+
+    /// What the Continue shelf is called for a format filter.
+    public static func heading(showing kind: BookKind) -> String {
+        switch kind {
+        case .all: "Continue"
+        case .ebooks: "Continue Reading"
+        case .audiobooks: "Continue Listening"
+        }
+    }
 }
 
 /// One Book file to jump back into. Opening it resumes at its Position.
@@ -21,6 +46,13 @@ public struct ContinueEntry: Sendable, Equatable, Identifiable {
     public var position: Position?
 
     public var id: Int { file.id }
+
+    public init(book: Book, file: BookFile, lastRead: Date, position: Position?) {
+        self.book = book
+        self.file = file
+        self.lastRead = lastRead
+        self.position = position
+    }
 }
 
 /// The Books the Server lists in its continue rows, each with its `lastReadTime`, kept for offline use.

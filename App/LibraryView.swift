@@ -20,24 +20,19 @@ struct LibraryView: View {
     /// The Book pulled off the shelf to look at its catalog card.
     @State private var pulled: Book?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.palette) private var palette
     @State private var downloadProblem: String?
     @State private var coverColors = CoverColors()
-    /// The scroll view's width, which decides how many spines a shelf holds.
+    /// The scroll view's width, which decides how many spines and cases a shelf holds.
     @State private var width: CGFloat = 0
     @Environment(AppModel.self) private var model
 
-    private static let margin: CGFloat = 14
-    private static let caseSide: CGFloat = 12
-    private static let spineGap: CGFloat = 2
-    private static let rack = LinearGradient(
-        stops: [
-            .init(color: Color(hex: 0x141416), location: 0),
-            .init(color: Color(hex: 0x2A2A2E), location: 0.06),
-            .init(color: Color(hex: 0x2A2A2E), location: 0.94),
-            .init(color: Color(hex: 0x141416), location: 1),
-        ],
-        startPoint: .leading, endPoint: .trailing
-    )
+    /// Between the screen's edge and the header controls and shelf contents.
+    static let inset: CGFloat = 16
+    private static let spineGap: CGFloat = 3
+    private static let caseGap: CGFloat = 8
+    private static let caseMinWidth: CGFloat = 150
 
     private var query: Query { Query(scope: scope, search: search, kind: kind) }
 
@@ -46,104 +41,119 @@ struct LibraryView: View {
         kind == .audiobooks ? [] : books.filter { $0.files.contains { $0.format != .audiobook } }
     }
 
-    /// Books with an audiobook file lie in the cassette rack. A Book with both is in both.
+    /// Books with an audiobook file sit in cassette cases. A Book with both is in both.
     private var audiobooks: [Book] {
         kind == .ebooks ? [] : books.filter { $0.files.contains { $0.format == .audiobook } }
     }
 
+    /// The width inside the insets, where Books stand.
+    private var shelfWidth: CGFloat { max(width - 2 * Self.inset, 0) }
+
+    /// At accessibility text sizes a shelf would hold one Book, so each gets a row instead.
+    private var usesRows: Bool { typeSize.isAccessibilitySize }
+
     var body: some View {
         let shelved = ebooks
         let racked = audiobooks
-        let spines = shelved.map(Spine.init)
         // Looked up per Book file below, so each spine doesn't search every Position and Download.
         let shelving = ShelvingLookup(positions: model.recordedPositions, downloads: model.downloadList)
-        // Inside the page margin and the bookcase's own sides.
-        let shelves = width > 0
-            ? Shelves.fill(thicknesses: spines.map(\.thickness), shelfWidth: width - 2 * (Self.margin + Self.caseSide), spacing: Self.spineGap)
-            : []
+        let continuing = showsContinueRows ? model.continueRows.entries(showing: kind) : []
+        let headed = !shelved.isEmpty && !racked.isEmpty
         ScrollView {
-            // Every shelf and cassette is its own lazy row, so a large library only builds what's on screen.
+            // Every shelf is its own lazy row, so a large library only builds what's on screen.
             LazyVStack(spacing: 0) {
-                ClothBoard(title: navigation.name(of: scope), subtitle: books.count == 1 ? "1 Book" : "\(books.count) Books")
+                header
+                    .padding(.horizontal, Self.inset)
                     .padding(.bottom, 16)
-                LeatherTabs {
-                    ForEach(BookKind.allCases, id: \.self) { kind in
-                        Button(kind.name) { self.kind = kind }
-                            .buttonStyle(LeatherTabStyle(isOn: self.kind == kind))
-                            .accessibilityAddTraits(self.kind == kind ? .isSelected : [])
-                    }
-                }
-                .padding(.bottom, 18)
                 if let problem, let message = problem.errorDescription {
-                    PaperTag {
-                        Label(message, systemImage: "wifi.exclamationmark")
-                            .font(.footnote)
-                            .foregroundStyle(Theme.inkSoft)
+                    PaperTag(edge: Theme.ribbon) {
+                        HStack {
+                            Label(message, systemImage: "wifi.exclamationmark")
+                                .font(.footnote)
+                                .foregroundStyle(palette.ink)
+                            Spacer(minLength: 8)
+                            Button("Retry") { Task { await refresh() } }
+                                .buttonStyle(OutlinedActionStyle(onPaper: true, fillsWidth: false))
+                        }
                     }
-                    .padding(.bottom, 18)
-                }
-                if showsContinueRows {
-                    if kind != .audiobooks, !model.continueRows.reading.isEmpty {
-                        continueShelf("Continue Reading", model.continueRows.reading, height: 176)
-                    }
-                    if kind != .ebooks, !model.continueRows.listening.isEmpty {
-                        continueShelf("Continue Listening", model.continueRows.listening, height: CassetteFace.size.height + 34)
-                    }
+                    .padding(.horizontal, Self.inset)
+                    .padding(.bottom, 16)
                 }
                 if !shelved.isEmpty || !racked.isEmpty {
                     TipView(CatalogCardTip())
-                        .tipBackground(Theme.paper)
-                        .tint(Theme.ribbon)
-                        // Paper is light whatever the device's appearance.
+                        .tipBackground(palette.raised)
+                        .tint(palette.paperAction)
+                        // Paper is light whatever the theme.
                         .environment(\.colorScheme, .light)
-                        .padding(.bottom, 18)
+                        .padding(.horizontal, Self.inset)
+                        .padding(.bottom, 16)
+                }
+                if hasLoaded, books.isEmpty, problem == nil {
+                    emptyState
+                        .padding(.horizontal, Self.inset)
+                        .padding(.vertical, 24)
+                } else if !hasLoaded, books.isEmpty {
+                    ProgressView()
+                        .padding(.vertical, 40)
+                }
+                if !continuing.isEmpty {
+                    continueShelf(continuing)
                 }
                 if !shelved.isEmpty {
-                    ShelfLabel("Ebooks")
-                        .padding(.bottom, 10)
-                    // Keyed by a type of their own: shelves numbered 0, 11, … would otherwise share
-                    // ids with the cassettes' Book ids below, and the lazy stack then puts a shelf
-                    // in a cassette's place, leaving a gap in the rack with books drawn in it.
-                    ForEach(shelves, id: \.shelfID) { shelf in
-                        BookShelf {
-                            ForEach(shelf, id: \.self) { index in
-                                spine(spines[index], of: shelved[index], shelving)
+                    if headed { headingShelf("Books") }
+                    if usesRows {
+                        ForEach(shelved) { book in
+                            BookRow(book: book, isAudiobook: false, throughBook: shelving.throughBook(book), library: library)
+                                .shelved(open: readAction(book)) { pull(book) }
+                                .shelfRow()
+                        }
+                    } else {
+                        let spines = shelved.map(Self.spine(for:))
+                        // Keyed by a type of their own: shelves numbered 0, 11, … would otherwise share
+                        // ids with the cassettes' Book ids below, and the lazy stack then puts a shelf
+                        // in a cassette's place, leaving a gap with books drawn in it.
+                        ForEach(Self.fill(spines, width: shelfWidth), id: \.range.shelfID) { shelf in
+                            HStack(alignment: .bottom, spacing: Self.spineGap) {
+                                ForEach(shelf.range, id: \.self) { index in
+                                    spine(shelf.spines[index - shelf.range.lowerBound], of: shelved[index], shelving)
+                                }
                             }
+                            .shelfRow(minHeight: Spine.heights.upperBound + 14)
                         }
                     }
-                    .padding(.bottom, 14)
                 }
                 if !racked.isEmpty {
-                    ShelfLabel("Audiobooks")
-                        .padding(.top, 8)
-                        .padding(.bottom, 10)
-                    Self.rack
-                        .frame(height: 10)
-                        .clipShape(.rect(topLeadingRadius: 8, topTrailingRadius: 8))
-                    ForEach(racked) { book in
-                        cassette(book, shelving)
-                            .padding(.horizontal, 12)
-                            .padding(.bottom, 4)
-                            .background(Self.rack)
+                    if headed { headingShelf("Audiobooks") }
+                    if usesRows {
+                        ForEach(racked) { book in
+                            BookRow(book: book, isAudiobook: true, throughBook: shelving.throughBook(book), library: library)
+                                .shelved(open: playAction(book)) { pull(book) }
+                                .shelfRow()
+                        }
+                    } else {
+                        let columns = max(1, Int((shelfWidth + Self.caseGap) / (Self.caseMinWidth + Self.caseGap)))
+                        let caseWidth = (shelfWidth - Self.caseGap * CGFloat(columns - 1)) / CGFloat(columns)
+                        ForEach(Self.rows(of: racked, columns: columns), id: \.id) { row in
+                            HStack(alignment: .bottom, spacing: Self.caseGap) {
+                                ForEach(row.books) { book in
+                                    cassette(book, shelving)
+                                        .frame(width: max(caseWidth, 1))
+                                }
+                            }
+                            .shelfRow()
+                        }
                     }
-                    Self.rack
-                        .frame(height: 10)
-                        .clipShape(.rect(bottomLeadingRadius: 8, bottomTrailingRadius: 8))
-                        .shadow(color: .black.opacity(0.6), radius: 8, y: 8)
                 }
             }
-            .padding(.horizontal, Self.margin)
-            .padding(.top, 8)
-            .padding(.bottom, 30)
+            .padding(.bottom, 24)
             .environment(coverColors)
-            // The bookcase is dark wood whatever the device's appearance. Set here and not on the
-            // whole view, so the readers it presents keep following the device.
-            .environment(\.colorScheme, .dark)
-            .tint(Theme.accent)
         }
+        .scrollDismissesKeyboard(.immediately)
         .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
-        .background { FeltBackground() }
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .background { CanvasBackground() }
+        .toolbarBackground(palette.canvas, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(palette.scheme, for: .navigationBar)
         .alert("Couldn't download", isPresented: Binding { downloadProblem != nil } set: { if !$0 { downloadProblem = nil } }) {
             Button("OK") {}
         } message: {
@@ -169,24 +179,10 @@ struct LibraryView: View {
         .animation(.snappy, value: pulled?.id)
         // The card covers the shelves, so their bars would only sit on top of it.
         .toolbarVisibility(pulled == nil ? .automatic : .hidden, for: .navigationBar, .bottomBar)
-        // The nameplate shows the name; the title stays for the sidebar's back button and VoiceOver.
+        // The heading shows the name; the title stays for the sidebar's back button and VoiceOver.
         .navigationTitle(navigation.name(of: scope))
-        // Inline, or the large title would repeat the nameplate above it.
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
-        // In the bar, so it leaves with the bar when a Book is pulled and never floats over the rack.
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Title or author")
-        .overlay {
-            Group {
-                if hasLoaded, books.isEmpty, problem == nil {
-                    emptyState
-                } else if !hasLoaded, books.isEmpty {
-                    ProgressView()
-                }
-            }
-            .environment(\.colorScheme, .dark)
-            .tint(Theme.accent)
-        }
         .fullScreenCover(item: $reading) { open in
             switch open.reader {
             case let .epub(reader): EPUBReaderView(title: open.title, model: reader)
@@ -204,11 +200,40 @@ struct LibraryView: View {
         }
     }
 
+    /// The scope's name, one search field and the format filter, scrolling with the shelves.
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(navigation.name(of: scope))
+                .serifTitle(34, relativeTo: .largeTitle)
+                .foregroundStyle(palette.text)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+            SearchField(text: $search)
+            Segments(selection: $kind, choices: BookKind.allCases.map { (name: $0.name, value: $0) })
+        }
+    }
+
+    /// Where the Books end and the Audiobooks begin. The objects say which is which, so the
+    /// heading is only there for VoiceOver's rotor.
+    private func headingShelf(_ title: String) -> some View {
+        Color.clear
+            .frame(maxWidth: .infinity, minHeight: 1, maxHeight: 1)
+            .accessibilityElement()
+            .accessibilityLabel(title)
+            .accessibilityAddTraits(.isHeader)
+    }
+
     @ViewBuilder private var emptyState: some View {
         if !search.trimmingCharacters(in: .whitespaces).isEmpty {
-            ContentUnavailableView.search(text: search)
+            // The query and filters stay above, with a way out.
+            VStack(spacing: 12) {
+                ContentUnavailableView.search(text: search)
+                Button("Clear Search") { search = "" }
+                    .buttonStyle(OutlinedActionStyle(fillsWidth: false))
+            }
         } else if scope != .everything || kind != .all {
-            ContentUnavailableView("No Books here", systemImage: "books.vertical")
+            ContentUnavailableView(kind == .audiobooks ? "No audiobooks here" : kind == .ebooks ? "No Books here" : "Nothing here", systemImage: "books.vertical")
         } else if !canSync {
             // Nothing cached and no Server to ask, which isn't the same as an empty library.
             ContentUnavailableView(
@@ -233,55 +258,114 @@ struct LibraryView: View {
         scope == .everything && search.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    /// The Book files the reader was last in, face out on a shelf of their own.
-    /// `height` fits what stands on it: covers are taller than cassettes.
-    private func continueShelf(_ title: String, _ entries: [ContinueEntry], height: CGFloat) -> some View {
-        VStack(spacing: 10) {
-            ShelfLabel(title)
-            BookShelf(height: height) {
+    /// The Book files the reader was last in, most recent first: one card in view, the rest a
+    /// swipe away, or stacked at accessibility text sizes.
+    private func continueShelf(_ entries: [ContinueEntry]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if usesRows {
+                VStack(spacing: 10) {
+                    ForEach(entries) { entry in continueButton(entry) }
+                }
+                .padding(.horizontal, Self.inset)
+            } else {
                 ScrollView(.horizontal) {
-                    LazyHStack(alignment: .bottom, spacing: 16) {
+                    LazyHStack(alignment: .bottom, spacing: 12) {
                         ForEach(entries) { entry in
-                            Button {
-                                Task { await open(entry.file, of: entry.book) }
-                            } label: {
-                                ContinueCard(entry: entry, library: library)
-                            }
-                            .buttonStyle(LiftsWhenPressed())
+                            continueButton(entry)
+                                .containerRelativeFrame(.horizontal)
                         }
                     }
                     .scrollTargetLayout()
                 }
+                .contentMargins(.horizontal, Self.inset, for: .scrollContent)
+                .scrollTargetBehavior(.viewAligned)
                 .scrollIndicators(.hidden)
-                .modifier(FadesWhereMoreToCome())
             }
         }
-        .padding(.bottom, 18)
+        .padding(.top, 18)
+        .shelfRow(insetContent: false)
+    }
+
+    private func continueButton(_ entry: ContinueEntry) -> some View {
+        Button {
+            Task { await open(entry.file, of: entry.book) }
+        } label: {
+            ContinueCard(entry: entry, heading: ContinueRows.heading(showing: kind), library: library)
+        }
+        .buttonStyle(LiftsWhenPressed())
+    }
+
+    /// One format opens; two or none shows the card, to pick or to see why not.
+    private func readAction(_ book: Book) -> (() -> Void)? {
+        let files = book.readableFiles
+        guard files.count == 1 else { return nil }
+        return { Task { await open(files[0], of: book) } }
+    }
+
+    private func playAction(_ book: Book) -> (() -> Void)? {
+        guard let file = Self.openable(book, among: [.audiobook]).first else { return nil }
+        return { Task { await open(file, of: book) } }
     }
 
     private func spine(_ spine: Spine, of book: Book, _ shelving: ShelvingLookup) -> some View {
-        let files = book.readableFiles
-        // One format opens; two or none shows the card, to pick or to see why not.
-        var read: (() -> Void)?
-        if files.count == 1 { read = { Task { await open(files[0], of: book) } } }
-        return BookSpine(
+        BookSpine(
             book: book, spine: spine, throughBook: shelving.throughBook(book),
             download: shelving.download(of: book.files.filter { $0.format != .audiobook }),
             library: library
         )
-        // Reaching into the gap beside it, so a tap between two thin spines still lands on one.
-        .shelved(open: read, reach: Self.spineGap / 2) { pull(book) }
+        // Reaching into the gap beside it, so a tap between two spines still lands on one.
+        .shelved(open: readAction(book), reach: Self.spineGap / 2) { pull(book) }
     }
 
     private func cassette(_ book: Book, _ shelving: ShelvingLookup) -> some View {
-        var play: (() -> Void)?
-        if let file = Self.openable(book, among: [.audiobook]).first { play = { Task { await open(file, of: book) } } }
-        return CassetteCase(
+        CassetteCase(
             book: book, throughBook: shelving.throughBook(book),
-            download: shelving.download(of: book.files.filter { $0.format == .audiobook }),
-            library: library
+            download: shelving.download(of: book.files.filter { $0.format == .audiobook })
         )
-        .shelved(open: play) { pull(book) }
+        .shelved(open: playAction(book)) { pull(book) }
+    }
+
+    /// A spine wide enough that its longest word fits across it at the standard type size, up
+    /// to the widest a spine gets.
+    private static func spine(for book: Book) -> Spine {
+        var spine = Spine(book: book)
+        let needed = Double(SpineType.neededThickness(for: spine.title))
+        spine.thickness = min(max(spine.thickness, needed), Spine.thicknesses.upperBound)
+        return spine
+    }
+
+    /// Spines shared out over shelves of `width`, then each shelf's spines stretched or squeezed
+    /// in proportion to span it, so every shelf is full and thick Books stay thicker than thin
+    /// ones. A shelf with too few Books to span it without looking bloated keeps a gap.
+    private static func fill(_ spines: [Spine], width: CGFloat) -> [FilledShelf] {
+        guard width > 0 else { return [] }
+        let ranges = Shelves.balanced(thicknesses: spines.map(\.thickness), shelfWidth: width, spacing: spineGap)
+        return ranges.map { range in
+            var shelf = Array(spines[range])
+            let natural = shelf.map(\.thickness).reduce(0, +)
+            let room = width - spineGap * Double(shelf.count - 1)
+            let scale = min(max(room / max(natural, 1), Shelves.stretch.lowerBound), Shelves.stretch.upperBound)
+            for index in shelf.indices { shelf[index].thickness = (shelf[index].thickness * scale).rounded(.down) }
+            return FilledShelf(range: range, spines: shelf)
+        }
+    }
+
+    private struct FilledShelf {
+        let range: Range<Int>
+        let spines: [Spine]
+    }
+
+    /// Cases in rows of `columns`, the last row left-aligned.
+    private static func rows(of books: [Book], columns: Int) -> [CaseRow] {
+        stride(from: 0, to: books.count, by: columns).map { start in
+            let row = Array(books[start ..< min(start + columns, books.count)])
+            return CaseRow(id: CaseRowID(firstBook: row[0].id, columns: columns), books: row)
+        }
+    }
+
+    private struct CaseRow {
+        let id: CaseRowID
+        let books: [Book]
     }
 
     /// Takes the Book off the shelf to show its catalog card.
@@ -383,30 +467,86 @@ private struct CatalogCardTip: Tip {
     var image: Image? { Image(systemName: "hand.tap") }
 }
 
-/// A row of Books on the back panel of the bookcase, standing on a ledge.
-private struct BookShelf<Content: View>: View {
-    /// Room for the tallest spine and a ribbon above it.
-    var height: CGFloat = Spine.heights.upperBound + 22
-    @ViewBuilder var content: Content
+/// Which row of cassette cases this is, by its first Book. Not a plain `Int`, so it never
+/// equals a shelf's or a Book's id in the same lazy stack.
+private struct CaseRowID: Hashable {
+    let firstBook: Int
+    let columns: Int
+}
 
-    var body: some View {
+private extension View {
+    /// One stretch of the bookcase: its content on the backing, standing on a ledge, the whole
+    /// width of the column so all the shelves read as one piece of furniture.
+    func shelfRow(minHeight: CGFloat = 0, insetContent: Bool = true) -> some View {
+        modifier(ShelfRow(minHeight: minHeight, insetContent: insetContent))
+    }
+}
+
+private struct ShelfRow: ViewModifier {
+    let minHeight: CGFloat
+    let insetContent: Bool
+
+    func body(content: Content) -> some View {
         VStack(spacing: 0) {
-            HStack(alignment: .bottom, spacing: 2) { content }
-                .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .bottomLeading)
-                .padding(.horizontal, 12)
-                .background(Theme.backPanel)
+            content
+                .padding(.horizontal, insetContent ? LibraryView.inset : 0)
+                .padding(.top, insetContent ? 14 : 0)
+                .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .bottomLeading)
+                .padding(.bottom, 0)
+                .background { ShelfBacking() }
             ShelfLedge()
         }
     }
 }
 
-/// A Book file in a continue shelf: an ebook's cover with a bookmark, or an audiobook's cassette.
-/// Either shows how far in the reader is.
+/// The Library's one search field, on paper.
+private struct SearchField: View {
+    @Binding var text: String
+
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(palette.inkSecondary)
+                .accessibilityHidden(true)
+            TextField(text: $text, prompt: Text("Search your library").foregroundStyle(palette.inkSecondary)) {
+                Text("Search your library")
+            }
+            .foregroundStyle(palette.ink)
+            .submitLabel(.search)
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            if !text.isEmpty {
+                Button("Clear Search", systemImage: "xmark.circle.fill") { text = "" }
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(palette.inkSecondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(.rect)
+            }
+        }
+        .font(.body)
+        .padding(.leading, 12)
+        .padding(.trailing, text.isEmpty ? 12 : 0)
+        .frame(minHeight: 44)
+        .background(palette.raised, in: .rect(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(palette.boundary, lineWidth: 1) }
+        .environment(\.colorScheme, .light)
+        .tint(palette.paperAction)
+    }
+}
+
+/// A Book file in the Continue shelf: its cover or cassette, what it is and how far in, and a
+/// way back in. The whole card is one button.
 private struct ContinueCard: View {
     let entry: ContinueEntry
+    /// "Continue", "Continue Reading" or "Continue Listening".
+    let heading: String
     let library: Library
 
     @Environment(CoverColors.self) private var coverColors
+    @Environment(\.palette) private var palette
+    @ScaledMetric(relativeTo: .body) private var thumbnailWidth: CGFloat = 104
 
     private var isAudiobook: Bool { entry.file.format == .audiobook }
 
@@ -416,66 +556,133 @@ private struct ContinueCard: View {
 
     private var throughBook: Double? { entry.position?.location.throughBook }
 
+    private var percent: String? {
+        throughBook.map { $0.formatted(.percent.precision(.fractionLength(0))) }
+    }
+
     var body: some View {
-        Group {
-            if isAudiobook {
-                CassetteFace(
-                    title: Spine.title(for: entry.book.title), throughBook: throughBook ?? 0,
-                    stripe: Color(coverColors.color(of: cover) ?? Spine(book: entry.book).fallbackColor)
-                )
-                .padding(.bottom, 10)
-                .task(id: cover) { await coverColors.load(cover, from: library) }
-            } else {
-                CoverImage(cover: cover, library: library)
-                    .frame(width: 96, height: 144, alignment: .bottom)
-                    .shadow(color: .black.opacity(0.6), radius: 6, x: 4, y: 6)
-                    .overlay(alignment: .topTrailing) {
-                        if let throughBook {
-                            Text(throughBook.formatted(.percent.precision(.fractionLength(0))))
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundStyle(Theme.ink)
-                                .padding(.horizontal, 4)
-                                .padding(.top, 2)
-                                .padding(.bottom, 7)
-                                .background(Theme.paper, in: Ribbon())
-                                .offset(x: -10, y: -12)
-                        }
-                    }
+        // The Book stands on the ledge, and a paper card leans beside it.
+        HStack(alignment: .bottom, spacing: 12) {
+            CoverImage(cover: cover, title: entry.book.title, library: library)
+                .frame(width: min(thumbnailWidth, 104), height: 150, alignment: .bottom)
+                .background(alignment: .bottom) {
+                    Ellipse().fill(.black.opacity(0.5)).frame(height: 7).blur(radius: 3).offset(y: 3)
+                }
+                .shadow(color: .black.opacity(0.35), radius: 4, x: 3, y: 0)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(heading.uppercased())
+                    .font(.caption.weight(.semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(palette.accent)
+                Text(entry.book.title)
+                    .serifTitle(20, relativeTo: .title3)
+                    .foregroundStyle(palette.ink)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                if let author = entry.book.authors.first {
+                    Text(author)
+                        .font(.system(.subheadline, design: .serif))
+                        .foregroundStyle(palette.inkSecondary)
+                        .lineLimit(1)
+                }
+                if let throughBook {
+                    ProgressBar(value: throughBook, track: palette.inkSecondary.opacity(0.25))
+                        .padding(.top, 6)
+                }
+                HStack(spacing: 6) {
+                    Text([percent, isAudiobook ? "Audiobook" : entry.file.format.name].compactMap(\.self).joined(separator: "  ·  "))
+                        .font(.footnote)
+                        .monospacedDigit()
+                        .foregroundStyle(palette.inkSecondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Image(systemName: isAudiobook ? "play.circle.fill" : "chevron.right")
+                        .font(isAudiobook ? .title2 : .body.weight(.semibold))
+                        .foregroundStyle(isAudiobook ? palette.accent : palette.ink)
+                        .accessibilityHidden(true)
+                }
+                .padding(.top, 2)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .paperCard(radius: 8)
+            .padding(.bottom, 16)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .task(id: cover) { await coverColors.load(cover, from: library) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spoken)
+        .accessibilityHint(isAudiobook ? "Resumes listening" : "Resumes reading")
     }
 
     private var spoken: String {
-        guard let throughBook else { return entry.book.title }
-        return "\(entry.book.title), \(throughBook.formatted(.percent.precision(.fractionLength(0))))"
+        var parts = ["Continue", entry.book.title]
+        if let author = entry.book.authors.first { parts.append(author) }
+        parts.append(isAudiobook ? "Audiobook" : entry.file.format.name)
+        if let percent { parts.append("\(percent) \(isAudiobook ? "played" : "read")") }
+        return parts.joined(separator: ", ")
     }
 }
 
-struct CoverImage: View {
-    let cover: Cover?
-    let library: Library
+/// A thin progress bar in the theme's accent.
+struct ProgressBar: View {
+    let value: Double
+    let track: Color
 
-    @State private var image: UIImage?
+    @Environment(\.palette) private var palette
 
     var body: some View {
-        ZStack {
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .clipShape(.rect(cornerRadius: 4))
-            } else {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(.fill.tertiary)
-                    .overlay { Image(systemName: "book.closed").foregroundStyle(.secondary) }
+        Capsule()
+            .fill(track)
+            .frame(height: 4)
+            .overlay(alignment: .leading) {
+                GeometryReader { proxy in
+                    Capsule().fill(palette.accent).frame(width: proxy.size.width * min(max(value, 0), 1))
+                }
             }
+            .accessibilityHidden(true)
+    }
+}
+
+/// A Book as a full-width row at accessibility text sizes: its cover, then its title, author and
+/// formats wrapping as far as they need.
+private struct BookRow: View {
+    let book: Book
+    let isAudiobook: Bool
+    let throughBook: Double?
+    let library: Library
+
+    @Environment(\.palette) private var palette
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            CoverImage(cover: isAudiobook ? book.audiobookCover ?? book.cover : book.ebookCover ?? book.cover, title: book.title, library: library)
+                .frame(width: 64)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(book.title)
+                    .serifTitle(20, relativeTo: .title3)
+                if !book.authors.isEmpty {
+                    Text(book.authors.formatted(.list(type: .and)))
+                        .font(.body)
+                        .foregroundStyle(palette.inkSecondary)
+                }
+                Text(BookFormats.labels(for: book.files).joined(separator: " · "))
+                    .font(.footnote)
+                    .foregroundStyle(palette.inkSecondary)
+                if let throughBook {
+                    Text("\(throughBook.formatted(.percent.precision(.fractionLength(0)))) \(isAudiobook ? "played" : "read")")
+                        .font(.footnote)
+                        .foregroundStyle(palette.inkSecondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .task(id: cover) {
-            guard let cover, let data = await library.image(for: cover) else { return }
-            image = UIImage(data: data)
-        }
+        .padding(12)
+        .paperCard(radius: 12)
+        .padding(.bottom, 8)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -524,26 +731,5 @@ private struct Lifted: ViewModifier {
 private struct LiftsWhenPressed: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.modifier(Lifted(isPressed: configuration.isPressed))
-    }
-}
-
-/// Fades out the end of a sideways shelf while more stands beyond it, so what doesn't fit reads
-/// as more to come and not as cut off. With everything in view nothing fades.
-private struct FadesWhereMoreToCome: ViewModifier {
-    @State private var hasMore = false
-
-    func body(content: Content) -> some View {
-        content
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.x + geometry.containerSize.width < geometry.contentSize.width - 1
-            } action: { _, hasMore in
-                self.hasMore = hasMore
-            }
-            .mask {
-                LinearGradient(
-                    stops: [.init(color: .black, location: 0.92), .init(color: hasMore ? .clear : .black, location: 1)],
-                    startPoint: .leading, endPoint: .trailing
-                )
-            }
     }
 }

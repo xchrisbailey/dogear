@@ -22,6 +22,8 @@ final class AudiobookPlayerModel {
     private(set) var info: AudiobookInfo?
     private(set) var currentTime: Duration = .zero
     private(set) var isPlaying = false
+    /// Playing, but waiting for the stream to catch up.
+    private(set) var isBuffering = false
     /// The stream stopped and couldn't be recovered; shown instead of silently stopping.
     private(set) var problem: String?
     /// Kept on the player, not the item, so it survives the rebuild when the token changes.
@@ -330,7 +332,11 @@ final class AudiobookPlayerModel {
     private func observePlayer() {
         timeControl = player.observe(\.timeControlStatus) { @Sendable [weak self] player, _ in
             let playing = player.timeControlStatus != .paused
-            Task { @MainActor in self?.playingChanged(playing) }
+            let waiting = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
+            Task { @MainActor in
+                self?.isBuffering = waiting
+                self?.playingChanged(playing)
+            }
         }
         timeObservers.append(player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main) { @Sendable [weak self] time in
             MainActor.assumeIsolated { self?.tick(time) }
@@ -560,8 +566,6 @@ enum ListeningPreferences {
     private static let speedKey = "playbackSpeed"
     private static let skipBackKey = "player.skipBackSeconds"
     private static let skipForwardKey = "player.skipForwardSeconds"
-    /// Read through `@AppStorage` by the player and Settings, so a change shows at once.
-    static let skinKey = "player.skin"
 
     static func load() -> ListeningSettings {
         let defaults = UserDefaults.standard

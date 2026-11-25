@@ -70,20 +70,22 @@ struct NoticeBanner<Action: View>: View {
     let tint: Color
     @ViewBuilder var action: Action
 
+    @Environment(\.palette) private var palette
+
     var body: some View {
         PaperTag(edge: tint) {
             HStack(alignment: .center, spacing: 12) {
                 Image(systemName: systemImage)
                     .font(.title3)
-                    .foregroundStyle(Theme.inkSoft)
+                    .foregroundStyle(palette.inkSecondary)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(Theme.label(.subheadline))
-                        .foregroundStyle(Theme.ink)
+                        .foregroundStyle(palette.ink)
                     Text(message)
                         .font(.footnote)
-                        .foregroundStyle(Theme.inkSoft)
+                        .foregroundStyle(palette.inkSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

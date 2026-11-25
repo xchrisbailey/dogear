@@ -7,9 +7,11 @@ import Foundation
 /// way a shelf looks uneven like a real one and a Book never changes shape between launches or
 /// devices.
 public struct Spine: Sendable, Equatable {
-    public static let thicknesses: ClosedRange<Double> = 26 ... 46
-    public static let heights: ClosedRange<Double> = 160 ... 196
-    public static let fontSizes: ClosedRange<Double> = 12 ... 19
+    /// Wide enough for a title read across the spine, a few words to a line.
+    public static let thicknesses: ClosedRange<Double> = 60 ... 86
+    public static let heights: ClosedRange<Double> = 172 ... 188
+    /// Never below 15 pt, so a title reads at arm's length.
+    public static let fontSizes: ClosedRange<Double> = 15 ... 17
     /// Ebook file sizes, in kilobytes, that span thinnest to thickest. A novel as an EPUB is a
     /// few hundred kilobytes and an illustrated book or a PDF tens of megabytes, so thickness
     /// follows the size's order of magnitude.
@@ -35,8 +37,8 @@ public struct Spine: Sendable, Equatable {
         fallbackColor = SpineColor.palette[Int(Self.mixed(book.id, salt: 3) % UInt64(SpineColor.palette.count))]
     }
 
-    /// A spine is narrow, so it carries the main title only: no subtitle, no leading article.
-    /// "The Odyssey" is "Odyssey"; "Moby-Dick; or, The Whale" is "Moby-Dick".
+    /// A spine carries the main title only, without a subtitle: "Moby-Dick; or, The Whale" is
+    /// "Moby-Dick". The title reads across the spine, so a leading article stays.
     public static func title(for title: String) -> String {
         var short = title.trimmingCharacters(in: .whitespaces)
         for separator in [":", ";", " - ", " – ", " — "] {
@@ -44,11 +46,6 @@ public struct Spine: Sendable, Equatable {
                 let main = short[..<cut.lowerBound].trimmingCharacters(in: .whitespaces)
                 if !main.isEmpty { short = main }
             }
-        }
-        for article in ["the ", "an ", "a "] where short.lowercased().hasPrefix(article) {
-            let rest = short.dropFirst(article.count).trimmingCharacters(in: .whitespaces)
-            if !rest.isEmpty { short = rest }
-            break
         }
         return short
     }
@@ -102,14 +99,14 @@ public struct SpineColor: Sendable, Hashable, Codable {
 
     /// Cloth colors for Books without a cover.
     public static let palette: [SpineColor] = [
-        SpineColor(red: 0.427, green: 0.122, blue: 0.133), // oxblood
-        SpineColor(red: 0.122, green: 0.200, blue: 0.329), // navy
-        SpineColor(red: 0.184, green: 0.353, blue: 0.227), // forest
-        SpineColor(red: 0.294, green: 0.165, blue: 0.310), // plum
-        SpineColor(red: 0.239, green: 0.310, blue: 0.388), // slate
-        SpineColor(red: 0.353, green: 0.086, blue: 0.188), // claret
-        SpineColor(red: 0.137, green: 0.149, blue: 0.169), // charcoal
-        SpineColor(red: 0.431, green: 0.243, blue: 0.118), // tan
+        SpineColor(red: 0.520, green: 0.150, blue: 0.150), // oxblood
+        SpineColor(red: 0.160, green: 0.250, blue: 0.440), // navy
+        SpineColor(red: 0.200, green: 0.380, blue: 0.240), // forest
+        SpineColor(red: 0.360, green: 0.190, blue: 0.380), // plum
+        SpineColor(red: 0.260, green: 0.350, blue: 0.450), // slate
+        SpineColor(red: 0.450, green: 0.100, blue: 0.220), // claret
+        SpineColor(red: 0.470, green: 0.330, blue: 0.090), // ochre
+        SpineColor(red: 0.560, green: 0.260, blue: 0.170), // terracotta
     ]
 
     /// WCAG relative luminance.
@@ -182,6 +179,48 @@ public enum Shelves {
             }
         }
         if start < thicknesses.count { shelves.append(start ..< thicknesses.count) }
+        return shelves
+    }
+
+    /// The most a shelf's spines are squeezed, and stretched, to span it.
+    public static let stretch: ClosedRange<Double> = 0.82 ... 1.45
+
+    /// Shelves with the spines shared out so every one holds about the same width of them, and
+    /// each can have its spines stretched or squeezed a little to span it. No shelf is left
+    /// with one stray Book: when the last shelf would be mostly empty, its Books are taken up by
+    /// the others if that squeezes them less than spreading out would stretch them.
+    public static func balanced(thicknesses: [Double], shelfWidth: Double, spacing: Double) -> [Range<Int>] {
+        let greedy = fill(thicknesses: thicknesses, shelfWidth: shelfWidth, spacing: spacing).count
+        guard greedy > 0 else { return [] }
+        let total = thicknesses.reduce(0, +)
+        /// How much spines change width, on average, to span `shelves` shelves.
+        func scale(over shelves: Int) -> Double {
+            (shelfWidth * Double(shelves) - spacing * Double(thicknesses.count - shelves)) / max(total, 1)
+        }
+        var count = greedy
+        if greedy > 1, scale(over: greedy - 1) >= stretch.lowerBound,
+           abs(log(scale(over: greedy - 1))) < abs(log(scale(over: greedy))) {
+            count = greedy - 1
+        }
+        guard count > 1 else { return [0 ..< thicknesses.count] }
+        var shelves: [Range<Int>] = []
+        var start = 0
+        var placed = 0.0
+        for shelf in 1 ..< count {
+            let boundary = total * Double(shelf) / Double(count)
+            // Leave at least one spine for each shelf still to come.
+            let last = thicknesses.count - (count - shelf)
+            var end = start + 1
+            placed += thicknesses[start]
+            // A spine goes on this shelf when more than half of it lies before the boundary.
+            while end < last, placed + thicknesses[end] / 2 <= boundary {
+                placed += thicknesses[end]
+                end += 1
+            }
+            shelves.append(start ..< end)
+            start = end
+        }
+        shelves.append(start ..< thicknesses.count)
         return shelves
     }
 }

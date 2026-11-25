@@ -31,35 +31,49 @@ struct CatalogCard: View {
         }
     }
 
+    @Environment(\.palette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @AccessibilityFocusState private var isCardFocused: Bool
+
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: 16) {
                     HStack {
                         Spacer()
                         Button("Put Back", systemImage: "xmark", action: putBack)
                             .labelStyle(.iconOnly)
                             .font(.headline)
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(palette.ink)
                             .frame(width: 44, height: 44)
-                            .background(Theme.backPanel, in: .circle)
+                            .background(palette.raised, in: .circle)
+                            .overlay { Circle().strokeBorder(palette.boundary, lineWidth: 1) }
                     }
-                    CoverImage(cover: book.cover, library: library)
-                        .frame(height: 220)
-                        .shadow(color: .black.opacity(0.7), radius: 14, x: 8, y: 12)
-                        .rotationEffect(.degrees(-3))
+                    CoverImage(cover: book.cover, title: book.title, library: library)
+                        // Shrinks first on a short screen or at large text sizes.
+                        .frame(height: max(110, min(typeSize.isAccessibilitySize ? 140 : 190, proxy.size.height * 0.28)))
+                        .shadow(color: .black.opacity(0.4), radius: 10, x: 6, y: 8)
+                        .rotationEffect(.degrees(reduceMotion ? 0 : -2.5))
                         .accessibilityHidden(true)
                         // The cover and the card are the Book in hand; only a tap beside them puts it back.
                         .onTapGesture {}
                     card
                         .onTapGesture {}
+                        .accessibilityFocused($isCardFocused)
                     VStack(spacing: 12) {
-                        ForEach(openable) { file in
-                            Button(file.format == .audiobook ? "Listen" : "Read \(file.format.name)") { open(file) }
-                                .buttonStyle(CardKeyStyle())
+                        ForEach(Array(openable.enumerated()), id: \.element.id) { index, file in
+                            let title = file.format == .audiobook ? "Listen" : "Read \(file.format.name)"
+                            if index == 0 {
+                                Button(title) { open(file) }
+                                    .buttonStyle(FilledActionStyle())
+                            } else {
+                                Button(title) { open(file) }
+                                    .buttonStyle(OutlinedActionStyle())
+                            }
                         }
                         DownloadMenu(book: book, problem: $downloadProblem)
-                            .buttonStyle(LeatherTabStyle(isOn: false))
+                            .buttonStyle(OutlinedActionStyle())
                     }
                 }
                 .padding(20)
@@ -74,96 +88,69 @@ struct CatalogCard: View {
             .modifier(PullsDownToClose(close: putBack))
         }
         .background {
-            FeltBackground()
-                .opacity(0.97)
+            CanvasBackground()
+                .opacity(0.98)
                 .accessibilityHidden(true)
         }
         .accessibilityAddTraits(.isModal)
         .accessibilityAction(.escape, putBack)
+        .onAppear { isCardFocused = true }
     }
 
-    /// Typed lines, each on its own rule, so the rules stay under the text at any text size.
+    /// One ruled paper card, a line per field, so the rules stay under the text at any size.
     private var card: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("DOGEAR LIBRARY")
-                .font(.custom("AmericanTypewriter", size: 11))
-                .tracking(1.5)
-                .foregroundStyle(Theme.ribbon)
-                .padding(.bottom, 6)
-                .accessibilityHidden(true)
-            line(book.title, size: 18)
+            Text(book.title)
+                .serifTitle(24, relativeTo: .title2)
+                .foregroundStyle(palette.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 4)
             if !book.authors.isEmpty {
-                line(book.authors.formatted(.list(type: .and)))
+                Text(book.authors.formatted(.list(type: .and)))
+                    .font(.body)
+                    .foregroundStyle(palette.inkSecondary)
+                    .padding(.bottom, 10)
             }
             line("Formats", BookFormats.labels(for: book.files).joined(separator: " · "))
+            if let throughBook {
+                line("Progress", "\(throughBook.formatted(.percent.precision(.fractionLength(0)))) through")
+            }
             if !onDevice.isEmpty {
                 line("On this device", onDevice.joined(separator: " · "))
             }
             ForEach(failures, id: \.self) { failure in
-                line(failure)
-            }
-            if let throughBook {
-                Text("\(throughBook.formatted(.percent.precision(.fractionLength(0)))) READ")
-                    .font(.custom("AmericanTypewriter-Bold", size: 13))
-                    .foregroundStyle(Theme.ribbon)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .overlay { RoundedRectangle(cornerRadius: 3).strokeBorder(Theme.ribbon, lineWidth: 2) }
-                    .rotationEffect(.degrees(-4))
-                    .padding(.top, 14)
+                Text(failure)
+                    .font(.subheadline)
+                    .foregroundStyle(palette.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+                    .overlay(alignment: .top) { palette.outline.frame(height: 1) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .background(Color(hex: 0xF3EAD0), in: .rect(cornerRadius: 4))
-        .shadow(color: .black.opacity(0.65), radius: 14, y: 12)
-        // Paper is light whatever the device's appearance.
-        .environment(\.colorScheme, .light)
+        .padding(16)
+        .paperCard(radius: 12)
         .accessibilityElement(children: .combine)
     }
 
-    private func line(_ text: String, size: CGFloat = 14) -> some View {
-        Text(text)
-            .font(.custom("AmericanTypewriter", size: size))
-            .foregroundStyle(Theme.ink)
-            .frame(maxWidth: .infinity, minHeight: 28, alignment: .bottomLeading)
-            .padding(.bottom, 3)
-            .overlay(alignment: .bottom) { Rule() }
-    }
-
     private func line(_ label: String, _ value: String) -> some View {
-        HStack(alignment: .lastTextBaseline) {
-            Text(label.uppercased())
-            Spacer(minLength: 12)
-            Text(value)
-                .multilineTextAlignment(.trailing)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(label)
+                    .foregroundStyle(palette.inkSecondary)
+                Spacer(minLength: 12)
+                Text(value)
+                    .foregroundStyle(palette.ink)
+                    .multilineTextAlignment(.trailing)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).foregroundStyle(palette.inkSecondary)
+                Text(value).foregroundStyle(palette.ink)
+            }
         }
-        .font(.custom("AmericanTypewriter", size: 13))
-        .foregroundStyle(Theme.ink)
-        .frame(maxWidth: .infinity, minHeight: 28, alignment: .bottom)
-        .padding(.bottom, 3)
-        .overlay(alignment: .bottom) { Rule() }
-    }
-
-    /// The blue ruling of an index card.
-    private struct Rule: View {
-        var body: some View {
-            Color(red: 0.27, green: 0.43, blue: 0.63).opacity(0.35).frame(height: 1)
-        }
-    }
-}
-
-/// A typewriter key, for what the card can do with the Book.
-private struct CardKeyStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.custom("AmericanTypewriter-Bold", size: 16))
-            .foregroundStyle(Theme.paper)
-            .frame(maxWidth: .infinity, minHeight: 48)
-            .background(
-                LinearGradient(colors: [Color(hex: 0x8C2A2A), Color(hex: 0x5E1515)], startPoint: .top, endPoint: .bottom),
-                in: .rect(cornerRadius: 6)
-            )
-            .offset(y: configuration.isPressed ? 2 : 0)
+        .font(.subheadline)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
+        .overlay(alignment: .top) { palette.outline.frame(height: 1) }
     }
 }

@@ -88,8 +88,8 @@ extension BookKind {
     public var name: String {
         switch self {
         case .all: "All"
-        case .ebooks: "Ebooks"
-        case .audiobooks: "Audiobooks"
+        case .ebooks: "Books"
+        case .audiobooks: "Audio"
         }
     }
 }

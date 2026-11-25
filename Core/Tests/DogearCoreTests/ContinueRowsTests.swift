@@ -117,4 +117,28 @@ struct ContinueRowsTests {
 
         #expect(await library.continueRows(including: []) == ContinueRows())
     }
+
+    @Test func allMergesReadingAndListeningByMostRecentEachFileOnce() async throws {
+        server.holdContinue(.reading, [(9, "2026-11-19T15:41:00Z"), (4, "2026-11-19T15:34:09Z")])
+        server.holdContinue(.listening, [(21, "2026-11-19T15:40:00Z"), (5, "2026-11-18T08:00:00Z")])
+        let library = try await signedInLibrary()
+        _ = try await library.refresh()
+
+        let rows = await library.continueRows(including: [])
+
+        #expect(titles(rows.entries(showing: .all)) == ["9/21", "21/32", "4/4", "5/5"])
+        #expect(rows.entries(showing: .ebooks) == rows.reading)
+        #expect(rows.entries(showing: .audiobooks) == rows.listening)
+        #expect(ContinueRows.heading(showing: .all) == "Continue")
+        #expect(ContinueRows.heading(showing: .ebooks) == "Continue Reading")
+        #expect(ContinueRows.heading(showing: .audiobooks) == "Continue Listening")
+    }
+
+    @Test func aBookFileInBothRowsShowsOnceInAll() {
+        let book = Book(id: 1, title: "Book", authors: [], files: [BookFile(id: 7, format: .epub, isSupported: true)], primaryFileID: nil, ebookCover: nil, audiobookCover: nil)
+        let entry = ContinueEntry(book: book, file: book.files[0], lastRead: Date(timeIntervalSince1970: 10), position: nil)
+        let rows = ContinueRows(reading: [entry], listening: [entry])
+
+        #expect(rows.entries(showing: .all).count == 1)
+    }
 }
