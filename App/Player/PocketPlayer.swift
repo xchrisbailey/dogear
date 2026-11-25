@@ -21,7 +21,7 @@ struct PocketPlayer: View {
         GeometryReader { proxy in
             // Side by side in a short, wide window, with the title and artwork together.
             let twoColumns = proxy.size.width >= 560 && proxy.size.height < proxy.size.width
-            let art = min(twoColumns ? 400 : proxy.size.width >= 560 ? 400 : 360, proxy.size.width - 32, max(proxy.size.height * 0.34, 160) * PocketDrawing.ratio)
+            let art = min(twoColumns ? 400 : proxy.size.width >= 560 ? 400 : 370, proxy.size.width - 32, max(proxy.size.height * 0.4, 170) * PocketDrawing.ratio)
             ScrollView {
                 VStack(spacing: 0) {
                     topBar
@@ -37,18 +37,20 @@ struct PocketPlayer: View {
                         }
                         .padding(.top, 12)
                     } else {
+                        // Spread down a tall screen rather than leaving its foot empty.
+                        Spacer(minLength: 8)
                         metadata
-                            .padding(.top, 12)
+                        Spacer(minLength: 16)
                         pocket(width: art)
-                            .padding(.top, 16)
+                        Spacer(minLength: 16)
                         functional
-                            .padding(.top, 16)
+                        Spacer(minLength: 16)
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 16)
-                .frame(maxWidth: twoColumns ? 1040 : 560)
-                .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+                .padding(.bottom, 8)
+                .frame(maxWidth: twoColumns ? 1040 : 560, minHeight: proxy.size.height, alignment: .top)
+                .frame(maxWidth: .infinity)
             }
             // Pulled down past the top, the player closes like a sheet, and the tape plays on.
             .modifier(PullsDownToClose(close: close))
@@ -103,12 +105,17 @@ struct PocketPlayer: View {
 
     private func pocket(width: CGFloat) -> some View {
         PocketDrawing(
-            title: model.title,
+            title: model.title, author: model.author,
             throughBook: model.knownSeconds.map { elapsed / $0 } ?? 0,
-            isPlaying: model.isPlaying, speed: Double(model.speed)
+            isPlaying: model.isPlaying, speed: Double(model.speed),
+            isReady: { if case .ready = model.state { true } else { false } }(),
+            skipBack: { model.skip(by: .zero - model.skipBack) },
+            togglePlayback: { model.togglePlayback() },
+            skipForward: { model.skip(by: model.skipForward) }
         )
-        .frame(width: max(width, 160), height: max(width, 160) / PocketDrawing.ratio)
-        // The title and author are read above; the player is decoration.
+        .frame(width: max(width, 170), height: max(width, 170) / PocketDrawing.ratio)
+        // The title and author are read above, and the transport row below is the one
+        // VoiceOver uses; the keys on the player work for a finger as a convenience.
         .accessibilityHidden(true)
     }
 
@@ -352,139 +359,3 @@ private struct PressStyle: ButtonStyle {
     }
 }
 
-/// The portable tape player: a rounded shell in the theme's plastic with its strap, a dark
-/// window onto the loaded cassette, whose label carries the Book's title, and a speaker grille.
-/// Its hubs turn while the tape plays, unless Reduce Motion is on.
-struct PocketDrawing: View {
-    /// Width over height, strap included.
-    static let ratio: CGFloat = 1.3
-
-    let title: String
-    /// 0…1.
-    let throughBook: Double
-    let isPlaying: Bool
-    let speed: Double
-
-    @Environment(\.palette) private var palette
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorSchemeContrast) private var contrast
-
-    var body: some View {
-        GeometryReader { proxy in
-            let w = proxy.size.width
-            let h = proxy.size.height
-            let strap = h * 0.13
-            let shellHeight = h - strap
-            ZStack(alignment: .top) {
-                // The strap, behind the shell.
-                UnevenRoundedRectangle(topLeadingRadius: strap * 1.6, topTrailingRadius: strap * 1.6)
-                    .stroke(palette.shellTrim, lineWidth: max(w * 0.018, 4))
-                    .frame(width: w * 0.5, height: strap * 2.2)
-                    .padding(.top, max(w * 0.009, 2))
-                shell(width: w, height: shellHeight)
-                    .padding(.top, strap)
-            }
-            .frame(width: w, height: h)
-        }
-    }
-
-    private func shell(width w: CGFloat, height h: CGFloat) -> some View {
-        let radius = w * 0.07
-        let window = CGSize(width: w * 0.8, height: h * 0.56)
-        return ZStack(alignment: .top) {
-            RoundedRectangle(cornerRadius: radius)
-                .fill(LinearGradient(colors: [palette.shell.mix(with: .white, by: 0.25), palette.shell], startPoint: .top, endPoint: .bottom))
-                // The edge catching the light.
-                .overlay { RoundedRectangle(cornerRadius: radius).strokeBorder(.white.opacity(0.6), lineWidth: 1.5).padding(1) }
-                .overlay { RoundedRectangle(cornerRadius: radius).strokeBorder(palette.shellTrim.opacity(0.35), lineWidth: 1) }
-                .shadow(color: .black.opacity(0.22), radius: 8, y: 6)
-            HStack(alignment: .firstTextBaseline) {
-                Text("DOGEAR")
-                    .font(.system(size: max(w * 0.036, 9), weight: .semibold, design: .serif))
-                    .tracking(2)
-                Spacer()
-                Text("PORTABLE CASSETTE PLAYER")
-                    .font(.system(size: max(w * 0.022, 6), weight: .medium))
-                    .tracking(0.6)
-            }
-            .foregroundStyle(palette.shellTrim)
-            .padding(.horizontal, w * 0.1)
-            .padding(.top, h * 0.06)
-            cassetteWindow(window)
-                .padding(.top, h * 0.15)
-            grille(width: w * 0.2, height: h * 0.14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, w * 0.1)
-                .padding(.top, h * 0.15 + window.height + h * 0.05)
-        }
-        .frame(width: w, height: h)
-    }
-
-    /// The dark window, the cassette's paper label and its two reels.
-    private func cassetteWindow(_ size: CGSize) -> some View {
-        let reelBox = size.height * 0.36
-        let reels = TapeReels(throughBook: throughBook, hub: reelBox * 0.2, full: reelBox * 0.5)
-        return VStack(spacing: size.height * 0.05) {
-            Text(title)
-                .font(.system(size: max(size.width * 0.07, 13), weight: .semibold, design: .serif).italic())
-                .foregroundStyle(palette.ink)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.7)
-                .padding(.horizontal, 10)
-                .frame(maxWidth: .infinity, minHeight: size.height * 0.34)
-                .background(palette.raised, in: .rect(cornerRadius: 3))
-                .overlay(alignment: .bottom) { palette.accent.opacity(0.7).frame(height: 1).padding(.horizontal, 14).padding(.bottom, 5) }
-            TimelineView(.animation(paused: !isPlaying || reduceMotion)) { timeline in
-                // One turn every 2.4 s at 1×, faster with the speed.
-                let angle = Angle.degrees(timeline.date.timeIntervalSinceReferenceDate * 150 * speed)
-                HStack {
-                    reel(tape: reels.supply, box: reelBox, angle: angle)
-                    Spacer(minLength: 0)
-                    reel(tape: reels.takeUp, box: reelBox, angle: angle)
-                }
-                .padding(.horizontal, size.width * 0.14)
-            }
-            .frame(height: reelBox)
-        }
-        .padding(size.width * 0.05)
-        .frame(width: size.width, height: size.height, alignment: .top)
-        .background(LinearGradient(colors: Theme.window, startPoint: .top, endPoint: .bottom), in: .rect(cornerRadius: size.width * 0.05))
-        .overlay {
-            RoundedRectangle(cornerRadius: size.width * 0.05)
-                .strokeBorder(palette.shellTrim.opacity(0.8), lineWidth: 3)
-        }
-        .overlay(alignment: .top) {
-            if contrast != .increased {
-                // Glare across the window's glass.
-                LinearGradient(colors: [.white.opacity(0.1), .clear], startPoint: .top, endPoint: .center)
-                    .clipShape(.rect(cornerRadius: size.width * 0.05))
-                    .allowsHitTesting(false)
-            }
-        }
-    }
-
-    private func reel(tape radius: Double, box: CGFloat, angle: Angle) -> some View {
-        ZStack {
-            Circle().fill(Theme.tape).frame(width: radius * 2, height: radius * 2)
-            Circle().fill(Color(hex: 0xEDE6D8)).frame(width: box * 0.42, height: box * 0.42)
-            ForEach(0 ..< 3, id: \.self) { tooth in
-                Capsule()
-                    .fill(Color(hex: 0x2A1A10))
-                    .frame(width: max(box * 0.05, 2), height: box * 0.32)
-                    .rotationEffect(.degrees(Double(tooth) * 60))
-            }
-            .rotationEffect(-angle)
-        }
-        .frame(width: box, height: box)
-    }
-
-    private func grille(width: CGFloat, height: CGFloat) -> some View {
-        VStack(spacing: height * 0.12) {
-            ForEach(0 ..< 5, id: \.self) { _ in
-                Capsule().fill(palette.shellTrim.opacity(0.45)).frame(height: max(height * 0.08, 1.5))
-            }
-        }
-        .frame(width: width, height: height)
-    }
-}
