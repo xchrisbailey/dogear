@@ -108,7 +108,7 @@ struct LibraryView: View {
                                 .shelfRow()
                         }
                     } else {
-                        let spines = shelved.map(Spine.init)
+                        let spines = shelved.map(Self.spine(for:))
                         // Keyed by a type of their own: shelves numbered 0, 11, … would otherwise share
                         // ids with the cassettes' Book ids below, and the lazy stack then puts a shelf
                         // in a cassette's place, leaving a gap with books drawn in it.
@@ -326,6 +326,15 @@ struct LibraryView: View {
             library: library
         )
         .shelved(open: playAction(book)) { pull(book) }
+    }
+
+    /// A spine wide enough that its longest word fits across it at the standard type size, up
+    /// to the widest a spine gets.
+    private static func spine(for book: Book) -> Spine {
+        var spine = Spine(book: book)
+        let needed = Double(SpineType.neededThickness(for: spine.title))
+        spine.thickness = min(max(spine.thickness, needed), Spine.thicknesses.upperBound)
+        return spine
     }
 
     /// Spines filled onto shelves of `width`, each full shelf's spines widened a little to

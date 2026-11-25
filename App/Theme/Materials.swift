@@ -196,7 +196,7 @@ struct CanvasBackground: View {
             }
             .overlay {
                 if contrast != .increased {
-                    if palette.theme == .bookcloth { Linen(opacity: 0.05) } else { Grain(opacity: 0.04) }
+                    if palette.theme == .bookcloth { Linen(opacity: 0.05) } else { Speckle(opacity: 0.035) }
                 }
             }
             .ignoresSafeArea()
@@ -204,8 +204,10 @@ struct CanvasBackground: View {
     }
 }
 
-/// Speckle from paper fibres. Seeded, so it doesn't shimmer when the view redraws.
-private struct Grain: View {
+/// Speckle from paper fibres or cloth, light and dark. Seeded, so it doesn't shimmer when the
+/// view redraws. `density` is square points per speck.
+struct Speckle: View {
+    var density: CGFloat = 60
     let opacity: Double
 
     var body: some View {
@@ -215,14 +217,16 @@ private struct Grain: View {
                 seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
                 return CGFloat(seed >> 33) / CGFloat(UInt32.max >> 1)
             }
-            let count = Int(size.width * size.height / 60)
+            let count = Int(size.width * size.height / density)
             for _ in 0 ..< count {
                 let dot = Path(CGRect(x: next() * size.width, y: next() * size.height, width: 1, height: 1))
-                context.fill(dot, with: .color(.black.opacity(opacity * (next() > 0.5 ? 1 : 2))))
+                let light = next() > 0.55
+                context.fill(dot, with: .color(light ? .white.opacity(opacity) : .black.opacity(opacity * 1.5)))
             }
         }
         .drawingGroup()
         .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -264,14 +268,14 @@ struct WoodGrain: View {
             let along = vertical ? size.height : size.width
             var offset: CGFloat = 0
             while offset < across {
-                let width = 0.5 + next() * 1.5
-                let dark = next() > 0.4
+                let width = 0.5 + next() * 2.5
+                let dark = next() > 0.35
                 let start = next() * along * 0.3
                 let rect = vertical
                     ? CGRect(x: offset, y: start, width: width, height: along)
                     : CGRect(x: start, y: offset, width: along, height: width)
                 context.fill(Path(rect), with: .color(dark ? .black.opacity(opacity) : .white.opacity(opacity * 0.6)))
-                offset += 2 + next() * 5
+                offset += 3 + next() * 7
             }
         }
         .allowsHitTesting(false)
@@ -279,42 +283,86 @@ struct WoodGrain: View {
     }
 }
 
-/// The back of the bookcase behind a row, in the theme's wood or cloth.
+/// The back of the bookcase behind a row, in the theme's wood or cloth: lit warm from above
+/// the middle, falling into shade at the sides and under the shelf above, between two uprights.
 struct ShelfBacking: View {
     @Environment(\.palette) private var palette
     @Environment(\.colorSchemeContrast) private var contrast
+
+    private var isCloth: Bool { palette.theme == .bookcloth }
+    /// Light wood shows shade less.
+    private var shade: Double { palette.hasDarkShelves ? 1 : 0.45 }
 
     var body: some View {
         palette.shelfBacking
             .overlay {
                 if contrast != .increased {
-                    if palette.theme == .bookcloth { Linen(opacity: 0.05) } else { WoodGrain(opacity: 0.1, vertical: true) }
+                    if isCloth { Linen(opacity: 0.05) } else { WoodGrain(opacity: 0.06, vertical: true).blur(radius: 0.5) }
                 }
             }
-            // Shade under the shelf above.
-            .overlay(alignment: .top) {
-                LinearGradient(colors: [.black.opacity(0.25), .clear], startPoint: .top, endPoint: .bottom).frame(height: 14)
+            // Lamplight on the middle of the case.
+            .overlay {
+                RadialGradient(colors: [Color(hex: 0xFFE2B0).opacity(palette.hasDarkShelves ? 0.12 : 0.18), .clear], center: UnitPoint(x: 0.5, y: 0.2), startRadius: 0, endRadius: 320)
             }
+            // The sides of the case in shade.
+            .overlay {
+                LinearGradient(
+                    stops: [
+                        .init(color: .black.opacity(0.32 * shade), location: 0),
+                        .init(color: .clear, location: 0.18),
+                        .init(color: .clear, location: 0.82),
+                        .init(color: .black.opacity(0.32 * shade), location: 1),
+                    ],
+                    startPoint: .leading, endPoint: .trailing
+                )
+            }
+            // Shade cast by the shelf above.
+            .overlay(alignment: .top) {
+                LinearGradient(colors: [.black.opacity(0.5 * shade), .black.opacity(0.12 * shade), .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 26)
+            }
+            .overlay(alignment: .leading) { if !isCloth { Upright(leading: true) } }
+            .overlay(alignment: .trailing) { if !isCloth { Upright(leading: false) } }
             .accessibilityHidden(true)
+    }
+
+    /// A side of the bookcase, seen edge-on.
+    private struct Upright: View {
+        let leading: Bool
+
+        @Environment(\.palette) private var palette
+
+        var body: some View {
+            LinearGradient(
+                colors: leading ? [palette.ledgeTop, palette.ledgeFace] : [palette.ledgeFace, palette.ledgeTop.mix(with: palette.ledgeFace, by: 0.5)],
+                startPoint: .leading, endPoint: .trailing
+            )
+            .overlay { WoodGrain(opacity: 0.1, vertical: true) }
+            .frame(width: 7)
+            .shadow(color: .black.opacity(0.35), radius: 3, x: leading ? 2 : -2)
+        }
     }
 }
 
-/// The front edge of a shelf: its lit top and its face, with a visible lip.
+/// The front edge of a shelf: its lit top with a bright lip, and its face in shade, casting a
+/// shadow on the back of the shelf below.
 struct ShelfLedge: View {
     @Environment(\.palette) private var palette
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         VStack(spacing: 0) {
-            palette.ledgeTop.frame(height: 3)
-            palette.ledgeFace
-                .overlay {
-                    if contrast != .increased { WoodGrain(opacity: 0.12) }
-                }
+            LinearGradient(colors: [palette.ledgeTop.mix(with: palette.ledgeFace, by: 0.25), palette.ledgeTop], startPoint: .top, endPoint: .bottom)
+                .frame(height: 4)
+            Color.white.opacity(0.28).frame(height: 1)
+            LinearGradient(colors: [palette.ledgeFace.mix(with: palette.ledgeTop, by: 0.3), palette.ledgeFace, palette.ledgeFace.mix(with: .black, by: 0.2)], startPoint: .top, endPoint: .bottom)
                 .frame(height: 7)
         }
-        .overlay(alignment: .top) { Color.white.opacity(0.2).frame(height: 1) }
-        .shadow(color: .black.opacity(0.3), radius: 3, y: 3)
+        .overlay {
+            if contrast != .increased { WoodGrain(opacity: 0.12) }
+        }
+        .shadow(color: .black.opacity(palette.hasDarkShelves ? 0.5 : 0.22), radius: 4, y: 4)
+        .zIndex(1)
         .accessibilityHidden(true)
     }
 }
