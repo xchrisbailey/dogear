@@ -1,3 +1,4 @@
+import DogearCore
 import Foundation
 import Synchronization
 
