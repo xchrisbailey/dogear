@@ -1,6 +1,6 @@
 # Grimmory API: what Dogear relies on
 
-Endpoint shapes and server behaviour Dogear depends on, verified against Grimmory v3.5.0 source and a live v3.5.0 Server (non-admin account, Nov 2026).
+Endpoint shapes and server behaviour Dogear depends on, verified against Grimmory v3.5.0 source and a live v3.5.0 Server (non-admin account, Nov 2026). v3.5.1 changes no API: its only change from v3.5.0 is a JVM flag in the Dockerfile (`-XX:-UseBASE64Intrinsics`, a CVE mitigation).
 
 Source: Grimmory v3.5.0 (`git clone --branch v3.5.0 https://github.com/grimmory-tools/grimmory`). Java paths are relative to `backend/src/main/java/org/booklore/`, frontend paths to `frontend/src/app/`. "Live" means observed on the running Server. Fixtures named below are in `Core/Tests/DogearCoreTests/Fixtures/`; anything marked "source only" was never seen live (the test Server had no PDF Book and no Book with several Book files).
 
@@ -33,7 +33,7 @@ Source: Grimmory v3.5.0 (`git clone --branch v3.5.0 https://github.com/grimmory-
 
 - Missing, malformed, expired and wrong-signature access tokens all give the same Spring 401. There is no "expired" signal: any 401 on a non-auth endpoint means refresh once and retry.
 - `ApiError` values that matter (`exception/ApiError.java`): `INVALID_CREDENTIALS` 401, `RATE_LIMITED` 429, `BOOK_NOT_FOUND` 404, `FORBIDDEN` 403 (`"Access denied to this book"`), `PERMISSION_DENIED` 403, `FILE_NOT_FOUND` 404, `FAILED_TO_DOWNLOAD_FILE` 500, `OIDC_ONLY_MODE` (password login blocked for non-admins).
-- Dogear's mapping lives in `Core/Sources/DogearCore/Account.swift` (`check`, `performUnobserved`): 403/404 have their own errors, 5xx and 429 are retryable, and "server changed" is reserved for HTML answers, undecodable bodies and unexpected statuses.
+- Dogear's mapping lives in `Core/Sources/DogearCore/Account.swift` (`check`, `performUnobserved`): 403/404 have their own errors, 5xx and 429 are retryable (on `auth/refresh` too; a 5xx on `auth/login` is `SignInError.serverFailing`), and "server changed" is reserved for HTML answers, undecodable bodies and unexpected statuses.
 
 ## Auth
 

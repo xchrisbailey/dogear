@@ -2,7 +2,7 @@ import Foundation
 
 /// A signed-in connection to one Server, persisted in a `TokenStore`.
 public struct Session: Codable, Sendable, Equatable {
-    public static let testedServerVersion = "v3.5.0"
+    public static let testedServerVersion = "v3.5.1"
 
     public var server: URL
     public var username: String
