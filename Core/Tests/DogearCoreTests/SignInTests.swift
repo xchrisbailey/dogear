@@ -108,12 +108,22 @@ struct SignInTests {
         #expect(await account.session == nil)
     }
 
+    @Test func serverErrorOnSignInSaysTheServerIsFailing() async {
+        let server = FakeGrimmory()
+        server.answer("POST", "/api/v1/auth/login", with: .response(status: 500, body: Data(#"{"status":500,"message":"Internal error"}"#.utf8)))
+
+        await #expect(throws: SignInError.serverFailing) {
+            try await account(for: server).signIn(address: FakeGrimmory.address, username: "reader", password: "correct horse")
+        }
+        #expect(tokenStore.session == nil)
+    }
+
     @Test func testedServerVersionSignsInWithoutWarning() async throws {
-        let session = try await account(for: FakeGrimmory(version: "v3.5.0")).signIn(
+        let session = try await account(for: FakeGrimmory(version: "v3.5.1")).signIn(
             address: FakeGrimmory.address, username: "reader", password: "correct horse"
         )
 
-        #expect(session.serverVersion == "v3.5.0")
+        #expect(session.serverVersion == "v3.5.1")
         #expect(session.versionWarning == nil)
     }
 

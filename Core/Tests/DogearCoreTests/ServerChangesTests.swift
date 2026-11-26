@@ -97,6 +97,18 @@ struct ServerChangesTests {
         #expect(await reading.outboxCount() == 0)
     }
 
+    @Test func refreshFailingOnTheServerIsOfflineRatherThanAChangedServer() async throws {
+        let account = try await signedIn()
+        server.expireAccessTokens()
+        // Grimmory v3.5.1 answered auth requests with a 500 and an ErrorResponse body.
+        server.answer("POST", "/api/v1/auth/refresh", with: .response(status: 500, body: Data(#"{"status":500,"message":"Internal error"}"#.utf8)))
+
+        await #expect(throws: RequestError.unreachable) { try await library(account).refresh() }
+
+        #expect(await account.serverStatus == ServerStatus(isReachable: false, hasChanged: false))
+        #expect(await account.session?.needsSignIn == false)
+    }
+
     @Test func expiredAccessTokenOffTheTailnetKeepsTheSignInForLater() async throws {
         let account = try await signedIn()
         let reading = try positions()

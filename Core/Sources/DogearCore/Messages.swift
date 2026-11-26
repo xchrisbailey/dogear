@@ -17,6 +17,8 @@ extension SignInError: LocalizedError {
             "Too many failed sign-in attempts. Wait a few minutes and try again."
         case .defaultPassword:
             "This account still uses Grimmory's default password. Sign in to Grimmory in a browser, change your password, then come back."
+        case .serverFailing:
+            "Your Server ran into an error signing you in. Check its logs, or try again later."
         case .serverChanged:
             "The Server's responses have changed shape. Update Dogear."
         case .differentAccount:

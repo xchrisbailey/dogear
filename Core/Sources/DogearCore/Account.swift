@@ -288,7 +288,8 @@ extension Account {
             let tokens = try await client.login(username: login.username, password: login.password)
             if tokens.isDefaultPassword == true { return .failure(.needsSignIn) }
             return .success(tokens)
-        } catch .unreachable {
+        } catch .unreachable, .serverFailing {
+            // A failing Server is like an unreachable one: the saved password is still good.
             serverStatus.isReachable = false
             return .failure(.unreachable)
         } catch .rateLimited {
@@ -345,6 +346,8 @@ public enum SignInError: Error, Equatable {
     case wrongCredentials
     case rateLimited
     case defaultPassword
+    /// The Server answered with an error of its own (5xx): it's failing, not changed.
+    case serverFailing
     case serverChanged
     /// Signing in again as another account or to another Server while still signed in.
     case differentAccount

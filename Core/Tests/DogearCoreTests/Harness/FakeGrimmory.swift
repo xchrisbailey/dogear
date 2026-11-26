@@ -1,3 +1,4 @@
+import DogearCore
 import Foundation
 import Synchronization
 
@@ -58,7 +59,7 @@ final class FakeGrimmory: Sendable {
 
     let state: Mutex<State>
 
-    init(kind: Kind = .grimmory, version: String = "v3.5.0", accounts: [Account] = [FakeGrimmory.reader]) {
+    init(kind: Kind = .grimmory, version: String = Session.testedServerVersion, accounts: [Account] = [FakeGrimmory.reader]) {
         state = Mutex(State(kind: kind, version: version, accounts: accounts))
     }
 
