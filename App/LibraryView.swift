@@ -565,14 +565,12 @@ private struct ContinueCard: View {
     }
 
     var body: some View {
-        // The Book stands on the ledge, and a paper card leans beside it.
-        HStack(alignment: .bottom, spacing: 12) {
+        // The cover beside a paper card, centred on it: a square audiobook cover is much shorter
+        // than a book's, and stood on the ledge it sat low beside the card.
+        HStack(alignment: .center, spacing: 12) {
             CoverImage(cover: cover, title: entry.book.title, library: library)
-                .frame(width: min(thumbnailWidth, 104), height: 150, alignment: .bottom)
-                .background(alignment: .bottom) {
-                    Ellipse().fill(.black.opacity(0.5)).frame(height: 7).blur(radius: 3).offset(y: 3)
-                }
-                .shadow(color: .black.opacity(0.35), radius: 4, x: 3, y: 0)
+                .frame(width: min(thumbnailWidth, 104), height: 150)
+                .shadow(color: .black.opacity(0.35), radius: 4, x: 3, y: 2)
             VStack(alignment: .leading, spacing: 4) {
                 Text(heading.uppercased())
                     .font(.caption.weight(.semibold))
@@ -611,8 +609,8 @@ private struct ContinueCard: View {
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .paperCard(radius: 8)
-            .padding(.bottom, 16)
         }
+        .padding(.bottom, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: cover) { await coverColors.load(cover, from: library) }
         .accessibilityElement(children: .ignore)
