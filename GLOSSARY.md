@@ -34,6 +34,10 @@ _Avoid_: Offline copy, cache
 How the audiobook player is drawn: the pocket tape player, the hi-fi deck, the turntable or the valve radio. Every skin has the same controls; the listener picks one in Settings.
 _Avoid_: Theme (a later, app-wide look)
 
+**Fold**:
+The crease across iPhone Duo's inner screen, which the system reports as a division region. Up and down when the phone opens like a book, across when the open phone is turned to portrait or stood partly open like a laptop. Layouts keep controls off it.
+_Avoid_: Hinge (the mechanism and its angle), seam (the test seams)
+
 ## Progress
 
 **Position**:

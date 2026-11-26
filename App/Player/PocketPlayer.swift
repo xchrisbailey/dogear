@@ -19,41 +19,99 @@ struct PocketPlayer: View {
 
     var body: some View {
         GeometryReader { proxy in
-            // Side by side in a short, wide window, with the title and artwork together.
-            let twoColumns = proxy.size.width >= 560 && proxy.size.height < proxy.size.width
-            let art = min(twoColumns ? 400 : proxy.size.width >= 560 ? 400 : 370, proxy.size.width - 32, max(proxy.size.height * 0.4, 170) * PocketDrawing.ratio)
             ScrollView {
-                VStack(spacing: 0) {
-                    topBar
-                    if twoColumns {
-                        HStack(alignment: .center, spacing: 32) {
-                            VStack(spacing: 16) {
-                                metadata
-                                pocket(width: min(art, (proxy.size.width - 64) / 2))
-                            }
-                            .frame(maxWidth: .infinity)
-                            functional
-                                .frame(maxWidth: .infinity)
-                        }
-                        .padding(.top, 12)
-                    } else {
-                        // Spread down a tall screen rather than leaving its foot empty.
-                        Spacer(minLength: 8)
-                        metadata
-                        Spacer(minLength: 16)
-                        pocket(width: art)
-                        Spacer(minLength: 16)
-                        functional
-                        Spacer(minLength: 16)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
-                .frame(maxWidth: twoColumns ? 1040 : 560, minHeight: proxy.size.height, alignment: .top)
-                .frame(maxWidth: .infinity)
+                arranged(PlayerArrangement(width: proxy.size.width, height: proxy.size.height, fold: proxy.fold), in: proxy.size)
+                    .frame(maxWidth: .infinity)
             }
             // Pulled down past the top, the player closes like a sheet, and the tape plays on.
             .modifier(PullsDownToClose(close: close))
+        }
+    }
+
+    /// The player's parts laid out for a screen `size` big, which may have a fold across it.
+    @ViewBuilder private func arranged(_ arrangement: PlayerArrangement, in size: CGSize) -> some View {
+        switch arrangement {
+        case .column:
+            // Spread down a tall screen rather than leaving its foot empty.
+            VStack(spacing: 0) {
+                topBar
+                Spacer(minLength: 8)
+                metadata
+                Spacer(minLength: 16)
+                pocket(width: min(size.width >= 560 ? 400 : 370, size.width - 32, max(size.height * 0.4, 170) * PocketDrawing.ratio))
+                Spacer(minLength: 16)
+                functional
+                Spacer(minLength: 16)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+            .frame(maxWidth: 560, minHeight: size.height, alignment: .top)
+        case .sideBySide(.none):
+            // Side by side in a short, wide window, with the title and artwork together.
+            let art = min(400, size.width - 32, max(size.height * 0.4, 170) * PocketDrawing.ratio)
+            VStack(spacing: 0) {
+                topBar
+                HStack(alignment: .center, spacing: 32) {
+                    VStack(spacing: 16) {
+                        metadata
+                        pocket(width: min(art, (size.width - 64) / 2))
+                    }
+                    .frame(maxWidth: .infinity)
+                    functional
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.top, 12)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+            .frame(maxWidth: 1040, minHeight: size.height, alignment: .top)
+        case let .sideBySide(.some(split)):
+            // Open like a book: the title and artwork on one page, the controls on the other.
+            let leading = max(CGFloat(split.before) - 16, 0)
+            let gap = CGFloat(split.gap)
+            let trailing = max(size.width - CGFloat(split.before) - gap - 16, 0)
+            VStack(spacing: 0) {
+                topBar
+                    .padding(.horizontal, 16)
+                HStack(alignment: .center, spacing: gap) {
+                    VStack(spacing: 16) {
+                        metadata
+                        pocket(width: min(400, leading - 16, max(size.height * 0.4, 170) * PocketDrawing.ratio))
+                    }
+                    .frame(width: leading)
+                    functional
+                        .padding(.horizontal, 8)
+                        .frame(width: trailing)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+            }
+            .padding(.bottom, 8)
+            .frame(width: size.width)
+            .frame(minHeight: size.height, alignment: .top)
+        case let .aboveAndBelow(split):
+            // Stood like a laptop: the player faces the listener, the controls lie flat to hand.
+            let above = CGFloat(split.before)
+            let gap = CGFloat(split.gap)
+            let below = max(size.height - above - gap, 0)
+            VStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    topBar
+                    Spacer(minLength: 4)
+                    metadata
+                    Spacer(minLength: 8)
+                    pocket(width: min(400, size.width - 32, max(above - 170, 110) * PocketDrawing.ratio))
+                    Spacer(minLength: 8)
+                }
+                .frame(minHeight: above, alignment: .top)
+                Color.clear
+                    .frame(height: gap)
+                    .accessibilityHidden(true)
+                functional
+                    .frame(maxWidth: 560)
+                    .frame(maxWidth: .infinity, minHeight: below)
+            }
+            .padding(.horizontal, 16)
         }
     }
 
