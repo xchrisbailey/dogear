@@ -280,6 +280,10 @@ struct LibraryView: View {
                 .contentMargins(.horizontal, Self.inset, for: .scrollContent)
                 .scrollTargetBehavior(.viewAligned)
                 .scrollIndicators(.hidden)
+                // A scroll view draws into the side safe areas, so beside iPhone Duo's vertical
+                // bar the next card showed past the shelf's end. Cut it off at the shelf's sides,
+                // leaving room above and below for the cards' shadows and press lift.
+                .mask { Rectangle().padding(.vertical, -40) }
             }
         }
         .padding(.top, 18)
