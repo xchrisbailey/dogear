@@ -87,7 +87,8 @@ struct PocketPlayer: View {
                 .padding(.top, 12)
             }
             .padding(.bottom, 8)
-            .frame(width: size.width, minHeight: size.height, alignment: .top)
+            .frame(width: size.width)
+            .frame(minHeight: size.height, alignment: .top)
         case let .aboveAndBelow(split):
             // Stood like a laptop: the player faces the listener, the controls lie flat to hand.
             let above = CGFloat(split.before)
