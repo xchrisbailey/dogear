@@ -1,4 +1,4 @@
 // The app's version, shown in TestFlight and the App Store. Bump it to ship: Xcode Cloud's
 // TestFlight workflow starts only when this file changes on main. The build number is set per
 // build (Xcode Cloud's counter, or scripts/testflight.sh's timestamp).
-MARKETING_VERSION = 0.2.2
+MARKETING_VERSION = 0.2.3
